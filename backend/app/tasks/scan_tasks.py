@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 import logging
+import os
 import sys
 from datetime import datetime, timezone
 
@@ -17,8 +18,18 @@ from app.tasks.celery_app import celery
 
 logger = logging.getLogger(__name__)
 
-# Add scrapers to path
-sys.path.insert(0, "/app")
+SCRAPERS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scrapers")
+# In Docker the scrapers are volume-mounted at /opt/scrapers
+if not os.path.isdir(SCRAPERS_DIR):
+    SCRAPERS_DIR = "/opt/scrapers"
+
+# Ensure the parent of scrapers/ is on sys.path so internal imports
+# like "from scrapers.base_scraper import ..." work inside scraper modules
+_scrapers_parent = os.path.dirname(os.path.abspath(SCRAPERS_DIR))
+if _scrapers_parent not in sys.path:
+    sys.path.insert(0, _scrapers_parent)
+
+logger = logging.getLogger(__name__)
 
 
 def _get_async_session() -> async_sessionmaker:

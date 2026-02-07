@@ -42,10 +42,17 @@ export default function App() {
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <aside className="w-64 border-r bg-card flex flex-col">
+      <aside className="w-64 border-r border-border bg-[#12121a] flex flex-col">
         <div className="p-6">
-          <h1 className="text-xl font-bold tracking-tight">Hunter</h1>
-          <p className="text-xs text-muted-foreground mt-1">Job Search Automation</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-violet-500">
+              <Radar className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight">Hunter</h1>
+              <p className="text-[11px] text-muted-foreground leading-none">Job Search Automation</p>
+            </div>
+          </div>
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
@@ -55,10 +62,10 @@ export default function App() {
               to={to}
               end={to === "/"}
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                   isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    ? "bg-indigo-dim text-primary font-medium"
+                    : "text-[#8888a0] hover:bg-white/[0.04] hover:text-foreground"
                 }`
               }
             >
@@ -68,11 +75,14 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="p-4 border-t">
+        <div className="p-4 border-t border-border">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {connected ? (
               <>
-                <Wifi className="h-3 w-3 text-green-500" />
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                </span>
                 <span>Connected</span>
               </>
             ) : (

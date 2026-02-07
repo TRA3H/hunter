@@ -40,6 +40,35 @@ async def _add_log(db: AsyncSession, app_id: str, action: str, details: str, scr
     await db.flush()
 
 
+async def _find_apply_button(page):
+    """Look for a visible 'Apply' button on job description pages.
+    Many job boards (Ashby, Greenhouse, Lever, etc.) show the job description
+    first and require clicking an 'Apply' button to reach the actual form."""
+    apply_selectors = [
+        'a:has-text("Apply for this Job")',
+        'button:has-text("Apply for this Job")',
+        'a:has-text("Apply Now")',
+        'button:has-text("Apply Now")',
+        'a:has-text("Apply for this Position")',
+        'button:has-text("Apply for this Position")',
+        'a:has-text("Apply to this Job")',
+        'button:has-text("Apply to this Job")',
+        'a:has-text("Apply")',
+        'button:has-text("Apply")',
+        '[data-testid="apply-button"]',
+        '.apply-button',
+        '#apply-button',
+    ]
+    for selector in apply_selectors:
+        try:
+            el = await page.query_selector(selector)
+            if el and await el.is_visible():
+                return el
+        except Exception:
+            continue
+    return None
+
+
 async def _run_auto_apply(app_id: str):
     """Execute the auto-apply process for an application."""
     session_factory = _get_async_session()
@@ -100,13 +129,25 @@ async def _run_auto_apply(app_id: str):
                 await page.goto(job.url, wait_until="networkidle", timeout=30000)
                 await page.wait_for_timeout(2000)  # Extra wait for JS rendering
 
+                # Try to click through to the application form if we're on
+                # a job description page with an "Apply" button/tab
+                apply_btn = await _find_apply_button(page)
+                if apply_btn:
+                    await _add_log(db, str(app_id), "clicking_apply", "Found apply button, clicking through to application form")
+                    await db.commit()
+                    try:
+                        await apply_btn.click()
+                        await page.wait_for_load_state("networkidle", timeout=15000)
+                        await page.wait_for_timeout(2000)
+                    except Exception as e:
+                        logger.warning("Failed to click apply button: %s", e)
+
                 screenshot_path = await take_screenshot(page, "initial")
                 await _add_log(db, str(app_id), "page_loaded", "Application page loaded", screenshot_path)
                 await db.commit()
 
-                # Check for CAPTCHA
-                page_content = await page.content()
-                if has_captcha(page_content):
+                # Check for visible CAPTCHA widgets
+                if await has_captcha(page):
                     application.status = ApplicationStatus.NEEDS_REVIEW
                     application.screenshot_path = screenshot_path
                     application.current_page_url = page.url

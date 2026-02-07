@@ -534,10 +534,10 @@ export default function BoardsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-up">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Job Boards</h1>
+          <h1 className="text-3xl font-serif tracking-tight">Job Boards</h1>
           <p className="text-muted-foreground">
             Manage your job board sources and scanning configuration.
           </p>
@@ -595,7 +595,7 @@ export default function BoardsPage() {
       ) : (
         <div className="grid gap-4">
           {boards.map((board) => (
-            <Card key={board.id} className={!board.enabled ? "opacity-60" : ""}>
+            <Card key={board.id} className={`transition-all duration-200 hover:border-primary/30 ${!board.enabled ? "opacity-60" : ""}`}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1 flex-1 min-w-0">
@@ -762,7 +762,7 @@ export default function BoardsPage() {
                       Keywords:
                     </span>
                     {board.keyword_filters.map((kw) => (
-                      <Badge key={kw} variant="outline" className="text-xs">
+                      <Badge key={kw} variant="secondary" className="text-xs bg-indigo-dim text-primary border-0">
                         {kw}
                       </Badge>
                     ))}

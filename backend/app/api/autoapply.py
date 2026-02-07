@@ -12,6 +12,7 @@ from app.models.board import JobBoard
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationListResponse,
+    ApplicationLogResponse,
     ApplicationResponse,
     ApplicationReview,
     DashboardStats,
@@ -168,15 +169,41 @@ async def start_application(data: ApplicationCreate, db: AsyncSession = Depends(
     log = ApplicationLog(application_id=app.id, action="created", details=f"Application created for {job.title} at {job.company}")
     db.add(log)
     await db.flush()
-    await db.refresh(app, attribute_names=["logs", "job"])
 
-    # Launch Celery task
+    # Commit so the Celery worker can see the row before we dispatch the task
+    await db.commit()
+
+    # Launch Celery task after commit
     from app.tasks.apply_tasks import auto_apply_task
     task = auto_apply_task.delay(str(app.id))
-    app.celery_task_id = task.id
-    await db.flush()
 
-    return _app_to_response(app)
+    app.celery_task_id = task.id
+    await db.commit()
+
+    # Build response manually to avoid MissingGreenlet from lazy attribute access
+    return ApplicationResponse(
+        id=app.id,
+        job_id=app.job_id,
+        status=app.status,
+        form_fields=None,
+        screenshot_path=app.screenshot_path,
+        current_page_url=app.current_page_url,
+        ai_answers=app.ai_answers,
+        error_message=app.error_message,
+        celery_task_id=app.celery_task_id,
+        created_at=app.created_at,
+        updated_at=app.created_at,  # just created, same as created_at
+        submitted_at=None,
+        logs=[ApplicationLogResponse(
+            id=log.id,
+            action=log.action,
+            details=log.details,
+            screenshot_path=log.screenshot_path,
+            timestamp=log.timestamp,
+        )],
+        job_title=job.title,
+        job_company=job.company,
+    )
 
 
 @router.post("/{app_id}/review", response_model=ApplicationResponse)

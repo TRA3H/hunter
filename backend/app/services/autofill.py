@@ -249,23 +249,38 @@ async def take_screenshot(page: Page, label: str = "") -> str:
     filename = f"screenshot_{ts}_{label}_{uuid.uuid4().hex[:8]}.png"
     filepath = os.path.join(SCREENSHOT_DIR, filename)
     await page.screenshot(path=filepath, full_page=True)
-    return filepath
+    return filename
 
 
-def has_captcha(page_content: str) -> bool:
-    """Simple heuristic to detect CAPTCHA presence on the page."""
-    captcha_indicators = [
-        "captcha",
-        "recaptcha",
-        "hcaptcha",
-        "g-recaptcha",
-        "h-captcha",
-        "challenge-form",
-        "cf-turnstile",
-        "arkose",
+async def has_captcha(page) -> bool:
+    """Detect CAPTCHA by checking for *visible* captcha widgets on the page
+    using Playwright. Invisible reCAPTCHA v3 and passively loaded scripts
+    are ignored."""
+    captcha_selectors = [
+        ".g-recaptcha",      # reCAPTCHA v2 widget
+        ".h-captcha",        # hCaptcha widget
+        ".cf-turnstile",     # Cloudflare Turnstile
+        "[id*='arkose']",    # Arkose Labs
+        ".challenge-form",   # Generic challenge
     ]
-    content_lower = page_content.lower()
-    return any(indicator in content_lower for indicator in captcha_indicators)
+    for selector in captcha_selectors:
+        try:
+            el = await page.query_selector(selector)
+            if el and await el.is_visible():
+                return True
+        except Exception:
+            continue
+    # Also check for captcha iframes that are visible
+    try:
+        for frame in page.frames:
+            if "recaptcha" in (frame.url or "") or "hcaptcha" in (frame.url or ""):
+                # Check if the iframe element is visible on the page
+                el = await page.query_selector(f'iframe[src*="{frame.url.split("/")[2]}"]')
+                if el and await el.is_visible():
+                    return True
+    except Exception:
+        pass
+    return False
 
 
 def needs_human_review(fields: list[dict]) -> bool:

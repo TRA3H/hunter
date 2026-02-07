@@ -191,12 +191,12 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="container mx-auto max-w-3xl py-8 px-4 space-y-6">
+    <div className="container mx-auto max-w-3xl py-8 px-4 space-y-6 animate-fade-up">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Settings className="h-7 w-7 text-muted-foreground" />
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+            <h1 className="text-3xl font-serif tracking-tight">Settings</h1>
             <p className="text-sm text-muted-foreground">
               Configure your job search automation preferences
             </p>
@@ -466,10 +466,10 @@ export default function SettingsPage() {
             </Button>
           </div>
 
-          <div className="border-t pt-4">
+          <div className="border-t border-destructive/20 pt-4 mt-4 rounded-lg bg-destructive/5 p-4 -mx-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Reset Scan History</p>
+                <p className="text-sm font-medium text-destructive">Reset Scan History</p>
                 <p className="text-xs text-muted-foreground">
                   Clear all scan history data. This cannot be undone.
                 </p>

@@ -21,7 +21,8 @@ import {
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatRelativeTime, scoreColor } from "@/lib/utils";
+import MatchScoreDot from "@/components/MatchScoreDot";
+import { formatRelativeTime } from "@/lib/utils";
 import { applicationsApi } from "@/lib/api";
 import type { DashboardStats, WSEvent } from "@/types";
 
@@ -171,11 +172,11 @@ function DashboardPage({ notifications }: DashboardPageProps) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-up">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-3xl font-serif tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {stats.total_jobs} jobs tracked across {stats.active_boards} boards
           </p>
@@ -194,8 +195,8 @@ function DashboardPage({ notifications }: DashboardPageProps) {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((card) => (
-          <Card key={card.title}>
+        {statCards.map((card, i) => (
+          <Card key={card.title} className={`animate-fade-up animation-delay-${(i + 1) * 100}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {card.title}
@@ -205,7 +206,7 @@ function DashboardPage({ notifications }: DashboardPageProps) {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{card.value}</div>
+              <div className="text-3xl font-serif">{card.value}</div>
               {card.title === "New Jobs" && stats.total_jobs > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
                   of {stats.total_jobs} total
@@ -243,31 +244,31 @@ function DashboardPage({ notifications }: DashboardPageProps) {
                   data={stats.jobs_by_board}
                   margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" />
                   <XAxis
                     dataKey="board"
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
-                    axisLine={{ stroke: "#334155" }}
+                    tick={{ fontSize: 12, fill: "#8888a0" }}
+                    axisLine={{ stroke: "#2a2a3a" }}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
+                    tick={{ fontSize: 12, fill: "#8888a0" }}
                     axisLine={false}
                     tickLine={false}
                     allowDecimals={false}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#1e293b",
-                      border: "1px solid #334155",
+                      backgroundColor: "#1c1c28",
+                      border: "1px solid #2a2a3a",
                       borderRadius: "8px",
-                      color: "#e2e8f0",
+                      color: "#e8e8f0",
                       fontSize: 13,
                     }}
                   />
                   <Bar
                     dataKey="count"
-                    fill="#3b82f6"
+                    fill="#6366f1"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={48}
                   />
@@ -298,36 +299,36 @@ function DashboardPage({ notifications }: DashboardPageProps) {
                 >
                   <defs>
                     <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#22c55e" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
-                    axisLine={{ stroke: "#334155" }}
+                    tick={{ fontSize: 12, fill: "#8888a0" }}
+                    axisLine={{ stroke: "#2a2a3a" }}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
+                    tick={{ fontSize: 12, fill: "#8888a0" }}
                     axisLine={false}
                     tickLine={false}
                     allowDecimals={false}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#1e293b",
-                      border: "1px solid #334155",
+                      backgroundColor: "#1c1c28",
+                      border: "1px solid #2a2a3a",
                       borderRadius: "8px",
-                      color: "#e2e8f0",
+                      color: "#e8e8f0",
                       fontSize: 13,
                     }}
                   />
                   <Area
                     type="monotone"
                     dataKey="count"
-                    stroke="#22c55e"
+                    stroke="#6366f1"
                     strokeWidth={2}
                     fill="url(#areaGradient)"
                   />
@@ -373,9 +374,7 @@ function DashboardPage({ notifications }: DashboardPageProps) {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {job.matchScore > 0 && (
-                        <span className={`text-xs font-semibold ${scoreColor(job.matchScore)}`}>
-                          {job.matchScore}%
-                        </span>
+                        <MatchScoreDot score={job.matchScore} size="sm" />
                       )}
                       <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                         {formatRelativeTime(job.timestamp)}

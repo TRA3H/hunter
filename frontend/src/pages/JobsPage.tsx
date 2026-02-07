@@ -12,6 +12,7 @@ import {
   statusColor,
   formatRelativeTime,
 } from "@/lib/utils";
+import MatchScoreDot from "@/components/MatchScoreDot";
 import type { Job, Board } from "@/types";
 import {
   Search,
@@ -126,11 +127,11 @@ function JobsPage() {
   }, [localMinScore, filters.min_score, updateFilters]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-up">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Jobs</h1>
+          <h1 className="text-3xl font-serif tracking-tight">Jobs</h1>
           <p className="text-muted-foreground">
             {total} job{total !== 1 ? "s" : ""} found
           </p>
@@ -344,7 +345,7 @@ function JobsPage() {
             return (
               <Card
                 key={job.id}
-                className={`transition-colors ${
+                className={`transition-all duration-200 hover:border-primary/30 ${
                   job.is_new
                     ? "border-primary/30 bg-primary/[0.02]"
                     : ""
@@ -414,15 +415,8 @@ function JobsPage() {
                       </div>
                     </div>
 
-                    {/* Match score badge */}
-                    <Badge
-                      variant="outline"
-                      className={`shrink-0 text-sm font-semibold tabular-nums ${scoreBgColor(
-                        job.match_score
-                      )}`}
-                    >
-                      {job.match_score}%
-                    </Badge>
+                    {/* Match score */}
+                    <MatchScoreDot score={job.match_score} size="lg" />
                   </div>
 
                   {/* Expanded description */}

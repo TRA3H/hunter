@@ -9,6 +9,7 @@ import {
   Clock,
   FileText,
   Image,
+  ExternalLink,
 } from "lucide-react";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -37,7 +38,10 @@ function statusLabel(status: ApplicationStatus): string {
 function screenshotUrl(path: string): string {
   if (!path) return "";
   if (path.startsWith("http")) return path;
-  return `/uploads/screenshots/${path}`;
+  // Strip any leading path components, keep just the filename
+  const filename = path.split("/").pop() || path;
+  const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  return `${apiBase}/uploads/screenshots/${filename}`;
 }
 
 export default function AutoApplyPage() {
@@ -224,11 +228,11 @@ export default function AutoApplyPage() {
               <Image className="h-4 w-4" />
               Application Screenshot
             </h4>
-            <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-auto rounded-lg border max-h-[500px]">
               <img
                 src={screenshotUrl(app.screenshot_path)}
                 alt="Application form screenshot"
-                className="w-full object-contain"
+                className="w-full min-w-[1280px]"
               />
             </div>
           </div>
@@ -284,6 +288,21 @@ export default function AutoApplyPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+          {app.current_page_url && (
+            <Button
+              variant="outline"
+              asChild
+            >
+              <a
+                href={app.current_page_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open in Browser
+              </a>
+            </Button>
+          )}
           <Button
             onClick={() => handleAiAssist(app)}
             disabled={isAiLoading || isSubmitting}
@@ -362,7 +381,7 @@ export default function AutoApplyPage() {
       app.status !== "failed";
 
     return (
-      <Card key={app.id} className="transition-shadow hover:shadow-md">
+      <Card key={app.id} className={`transition-all duration-200 hover:shadow-md hover:border-primary/30 ${app.status === "needs_review" ? "animate-gentle-pulse" : ""}`}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
@@ -466,9 +485,9 @@ export default function AutoApplyPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-up">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Auto-Apply</h1>
+        <h1 className="text-3xl font-serif tracking-tight">Auto-Apply</h1>
         <p className="text-muted-foreground">
           Review and manage automated job applications
         </p>
@@ -490,14 +509,14 @@ export default function AutoApplyPage() {
       )}
 
       {/* Filter Tabs */}
-      <div className="flex gap-1 rounded-lg border bg-muted/50 p-1">
+      <div className="flex gap-1 rounded-full border bg-muted/50 p-1">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
               activeTab === tab.key
-                ? "bg-background text-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -505,7 +524,7 @@ export default function AutoApplyPage() {
             <span
               className={`rounded-full px-1.5 py-0.5 text-xs ${
                 activeTab === tab.key
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-white/20 text-primary-foreground"
                   : "bg-muted text-muted-foreground"
               }`}
             >

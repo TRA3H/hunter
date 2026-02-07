@@ -411,10 +411,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl space-y-6">
+    <div className="container mx-auto py-8 px-4 max-w-4xl space-y-6 animate-fade-up">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
+          <h1 className="text-3xl font-serif tracking-tight">Profile</h1>
           <p className="text-muted-foreground mt-1">
             Manage your personal information, preferences, and application
             materials.
@@ -1065,7 +1065,10 @@ export default function ProfilePage() {
               </Badge>
             </div>
           )}
-          <div className="flex items-center gap-4">
+          <div
+            className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border p-6 cursor-pointer hover:border-primary/40 transition-colors"
+            onClick={() => fileInputRef.current?.click()}
+          >
             <input
               ref={fileInputRef}
               type="file"
@@ -1074,21 +1077,19 @@ export default function ProfilePage() {
               className="hidden"
               id="resume-upload"
             />
-            <Button
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingResume}
-            >
-              {uploadingResume ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-2 h-4 w-4" />
-              )}
-              {profile?.resume_filename ? "Replace Resume" : "Upload Resume"}
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              PDF files only
-            </span>
+            {uploadingResume ? (
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            ) : (
+              <Upload className="h-8 w-8 text-muted-foreground" />
+            )}
+            <div className="text-center">
+              <p className="text-sm font-medium">
+                {profile?.resume_filename ? "Replace Resume" : "Upload Resume"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                PDF files only
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
