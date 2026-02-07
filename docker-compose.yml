@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hunter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hunter_secret_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-hunter}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hunter}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hunter}:${POSTGRES_PASSWORD:-hunter_secret_change_me}@postgres:5432/${POSTGRES_DB:-hunter}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/srv
+      - ./scrapers:/srv/scrapers
+      - upload_data:/srv/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hunter}:${POSTGRES_PASSWORD:-hunter_secret_change_me}@postgres:5432/${POSTGRES_DB:-hunter}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/srv
+      - ./scrapers:/srv/scrapers
+      - upload_data:/srv/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hunter}:${POSTGRES_PASSWORD:-hunter_secret_change_me}@postgres:5432/${POSTGRES_DB:-hunter}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/srv
+      - ./scrapers:/srv/scrapers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_WS_URL: ws://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+  upload_data:
