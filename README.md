@@ -127,7 +127,7 @@ npm run dev
 | Variable | Description | Default |
 |---|---|---|
 | `POSTGRES_USER` | PostgreSQL username | `hunter` |
-| `POSTGRES_PASSWORD` | PostgreSQL password | `hunter_secret_change_me` |
+| `POSTGRES_PASSWORD` | PostgreSQL password | (required) |
 | `POSTGRES_DB` | PostgreSQL database name | `hunter` |
 | `DATABASE_URL` | Full database connection string | Auto-constructed |
 | `REDIS_URL` | Redis connection URL | `redis://redis:6379/0` |

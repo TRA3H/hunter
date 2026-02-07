@@ -5,13 +5,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # Database
-    database_url: str = "postgresql+asyncpg://hunter:hunter_secret_change_me@localhost:5432/hunter"
+    database_url: str = ""
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
     # Security
-    secret_key: str = "change-this-to-a-random-secret-key"
+    secret_key: str = ""
 
     # CORS
     backend_cors_origins: str = "http://localhost:5173,http://localhost:3000"
