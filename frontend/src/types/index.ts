@@ -68,6 +68,7 @@ export interface JobFilters {
   location?: string;
   is_new?: boolean;
   is_hidden?: boolean;
+  posted_days?: number;
   sort_by?: string;
   sort_order?: string;
   page?: number;

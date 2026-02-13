@@ -42,7 +42,8 @@ class JobFilters(BaseModel):
     location: str | None = None
     is_new: bool | None = None
     is_hidden: bool | None = None
-    sort_by: str = "created_at"  # created_at, match_score, title, company
+    posted_days: int | None = None  # Filter jobs posted within the last N days
+    sort_by: str = "created_at"  # created_at, match_score, title, company, posted_date
     sort_order: str = "desc"
     page: int = 1
     page_size: int = 25

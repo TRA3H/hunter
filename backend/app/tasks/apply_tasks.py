@@ -178,7 +178,8 @@ async def _run_auto_apply(app_id: str):
                     if field["field_type"] == "file" and profile.resume_path:
                         import os
                         if os.path.exists(profile.resume_path):
-                            field["value"] = profile.resume_path
+                            field["value"] = profile.resume_filename or os.path.basename(profile.resume_path)
+                            field["_resume_path"] = profile.resume_path
                             selector = field.get("_selector", "")
                             if selector:
                                 try:
@@ -254,6 +255,10 @@ async def _run_resume_apply(app_id: str):
         job = application.job
         fields = application.form_fields or []
 
+        # Load profile for resume path
+        profile_result = await db.execute(select(UserProfile).limit(1))
+        profile = profile_result.scalar_one_or_none()
+
         application.status = ApplicationStatus.IN_PROGRESS
         await _add_log(db, str(app_id), "resuming", "Resuming application with user-reviewed fields")
         await db.commit()
@@ -271,34 +276,7 @@ async def _run_resume_apply(app_id: str):
                 await page.wait_for_timeout(2000)
 
                 # Fill all fields with user-reviewed values
-                for field in fields:
-                    if not field.get("value") or not field.get("field_name"):
-                        continue
-                    try:
-                        # Try multiple selector strategies
-                        selector = f"[name='{field['field_name']}']"
-                        elem = await page.query_selector(selector)
-                        if not elem:
-                            selector = f"#{field['field_name']}"
-                            elem = await page.query_selector(selector)
-
-                        if elem:
-                            if field["field_type"] == "select":
-                                await elem.select_option(label=field["value"])
-                            elif field["field_type"] == "checkbox":
-                                is_checked = await elem.is_checked()
-                                should_check = field["value"].lower() in ("yes", "true", "1")
-                                if is_checked != should_check:
-                                    await elem.click()
-                            elif field["field_type"] == "file":
-                                import os
-                                if os.path.exists(field["value"]):
-                                    await elem.set_input_files(field["value"])
-                            else:
-                                await elem.fill("")
-                                await elem.fill(field["value"])
-                    except Exception as e:
-                        logger.warning("Failed to fill field %s: %s", field["field_name"], e)
+                await _fill_page_fields(page, fields, profile)
 
                 # Take final screenshot before submit
                 screenshot_path = await take_screenshot(page, "pre_submit")
@@ -349,6 +327,100 @@ async def _run_resume_apply(app_id: str):
             _broadcast_status(str(app_id), "failed", str(e)[:200])
 
 
+async def _fill_page_fields(page, fields: list[dict], profile: UserProfile | None):
+    """Fill form fields on a page. Shared by _run_resume_apply and _run_open_browser."""
+    import os
+
+    for field in fields:
+        if not field.get("value") or not field.get("field_name"):
+            continue
+        try:
+            selector = f"[name='{field['field_name']}']"
+            elem = await page.query_selector(selector)
+            if not elem:
+                selector = f"#{field['field_name']}"
+                elem = await page.query_selector(selector)
+
+            if elem:
+                if field["field_type"] == "select":
+                    await elem.select_option(label=field["value"])
+                elif field["field_type"] == "checkbox":
+                    is_checked = await elem.is_checked()
+                    should_check = field["value"].lower() in ("yes", "true", "1")
+                    if is_checked != should_check:
+                        await elem.click()
+                elif field["field_type"] == "file":
+                    resume_path = profile.resume_path if profile else ""
+                    if resume_path and os.path.exists(resume_path):
+                        await elem.set_input_files(resume_path)
+                else:
+                    await elem.fill("")
+                    await elem.fill(field["value"])
+        except Exception as e:
+            logger.warning("Failed to fill field %s: %s", field["field_name"], e)
+
+
+async def _run_open_browser(app_id: str):
+    """Open a headed browser with form fields pre-filled for the user."""
+    session_factory = _get_async_session()
+
+    async with session_factory() as db:
+        result = await db.execute(
+            select(Application)
+            .options(selectinload(Application.job))
+            .where(Application.id == app_id)
+        )
+        application = result.scalar_one_or_none()
+        if not application:
+            logger.error("Application %s not found for open-browser", app_id)
+            return
+
+        job = application.job
+        fields = application.form_fields or []
+
+        # Load profile for resume
+        profile_result = await db.execute(select(UserProfile).limit(1))
+        profile = profile_result.scalar_one_or_none()
+
+        await _add_log(db, str(app_id), "browser_opened", "Opening headed browser with pre-filled form data")
+        await db.commit()
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=False)
+                context = await browser.new_context(
+                    viewport={"width": 1280, "height": 900},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                )
+                page = await context.new_page()
+
+                url = application.current_page_url or (job.url if job else None)
+                if not url:
+                    logger.error("No URL available for application %s", app_id)
+                    return
+
+                await page.goto(url, wait_until="networkidle", timeout=30000)
+                await page.wait_for_timeout(2000)
+
+                # Fill stored field values
+                await _fill_page_fields(page, fields, profile)
+
+                # Wait for user to close the browser
+                disconnected = asyncio.Event()
+                browser.on("disconnected", lambda: disconnected.set())
+                await disconnected.wait()
+
+            async with session_factory() as db2:
+                await _add_log(db2, str(app_id), "browser_closed", "User closed the headed browser")
+                await db2.commit()
+
+        except Exception as e:
+            logger.exception("Open browser failed for application %s", app_id)
+            async with session_factory() as db2:
+                await _add_log(db2, str(app_id), "error", f"Open browser failed: {str(e)[:300]}")
+                await db2.commit()
+
+
 def _broadcast_status(app_id: str, status: str, message: str):
     """Broadcast application status update to WebSocket clients."""
     try:
@@ -380,3 +452,12 @@ def resume_apply_task(self, app_id: str):
     except Exception as exc:
         logger.exception("Resume apply task failed for %s", app_id)
         raise self.retry(exc=exc, countdown=30)
+
+
+@celery.task(name="app.tasks.apply_tasks.open_browser_task", bind=True, max_retries=0)
+def open_browser_task(self, app_id: str):
+    """Celery task to open a headed browser with pre-filled form data."""
+    try:
+        asyncio.run(_run_open_browser(app_id))
+    except Exception:
+        logger.exception("Open browser task failed for %s", app_id)

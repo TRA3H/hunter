@@ -50,6 +50,7 @@ class Job(Base):
         Index("ix_jobs_match_score", "match_score"),
         Index("ix_jobs_created_at", "created_at"),
         Index("ix_jobs_board_id", "board_id"),
+        Index("ix_jobs_posted_date", "posted_date"),
     )
 
     def __repr__(self) -> str:

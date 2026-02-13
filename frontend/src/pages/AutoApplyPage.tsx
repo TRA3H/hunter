@@ -54,6 +54,7 @@ export default function AutoApplyPage() {
   const [submitting, setSubmitting] = useState<Record<string, boolean>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [cancelling, setCancelling] = useState<Record<string, boolean>>({});
+  const [browserLoading, setBrowserLoading] = useState<Record<string, boolean>>({});
 
   const fetchApplications = useCallback(async () => {
     setLoading(true);
@@ -291,16 +292,24 @@ export default function AutoApplyPage() {
           {app.current_page_url && (
             <Button
               variant="outline"
-              asChild
+              disabled={browserLoading[app.id]}
+              onClick={async () => {
+                setBrowserLoading((prev) => ({ ...prev, [app.id]: true }));
+                try {
+                  await applicationsApi.openBrowser(app.id);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to open browser");
+                } finally {
+                  setBrowserLoading((prev) => ({ ...prev, [app.id]: false }));
+                }
+              }}
             >
-              <a
-                href={app.current_page_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              {browserLoading[app.id] ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Open in Browser
-              </a>
+              )}
+              Open in Browser
             </Button>
           )}
           <Button

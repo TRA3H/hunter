@@ -254,6 +254,23 @@ async def cancel_application(app_id: uuid.UUID, db: AsyncSession = Depends(get_d
     return _app_to_response(app)
 
 
+@router.post("/{app_id}/open-browser", response_model=dict)
+async def open_browser(app_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Application).where(Application.id == app_id)
+    )
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    if app.status not in (ApplicationStatus.NEEDS_REVIEW, ApplicationStatus.READY_TO_SUBMIT):
+        raise HTTPException(status_code=400, detail="Application must be in needs_review or ready_to_submit status")
+
+    from app.tasks.apply_tasks import open_browser_task
+    task = open_browser_task.delay(str(app.id))
+    return {"task_id": task.id, "message": "Browser opening with pre-filled form data"}
+
+
 @router.post("/{app_id}/ai-assist", response_model=dict)
 async def request_ai_assist(app_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(

@@ -243,6 +243,30 @@ function JobsPage() {
               </div>
             </div>
 
+            {/* Posted within */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Posted within</label>
+              <select
+                data-testid="recency-filter"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={filters.posted_days ?? ""}
+                onChange={(e) =>
+                  updateFilters({
+                    posted_days: e.target.value
+                      ? Number(e.target.value)
+                      : undefined,
+                  })
+                }
+              >
+                <option value="">Any time</option>
+                <option value="1">Today</option>
+                <option value="3">Last 3 days</option>
+                <option value="7">Last 7 days</option>
+                <option value="14">Last 2 weeks</option>
+                <option value="30">Last 30 days</option>
+              </select>
+            </div>
+
             {/* Sort by */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Sort by</label>
@@ -251,7 +275,7 @@ function JobsPage() {
                 value={filters.sort_by ?? "created_at"}
                 onChange={(e) => updateFilters({ sort_by: e.target.value })}
               >
-                <option value="created_at">Date added</option>
+                <option value="created_at">Date scanned</option>
                 <option value="posted_date">Posted date</option>
                 <option value="match_score">Match score</option>
                 <option value="title">Title</option>
@@ -287,6 +311,7 @@ function JobsPage() {
                     min_score: undefined,
                     location: undefined,
                     is_new: undefined,
+                    posted_days: undefined,
                     sort_by: undefined,
                     sort_order: undefined,
                   });
@@ -405,7 +430,7 @@ function JobsPage() {
                           </span>
                         )}
                         <span>
-                          Added {formatRelativeTime(job.created_at)}
+                          Scanned {formatRelativeTime(job.created_at)}
                         </span>
                         {job.board_name && (
                           <span className="rounded bg-muted px-1.5 py-0.5">

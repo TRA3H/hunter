@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Select, desc, asc, func as sa_func, select, text
@@ -42,6 +43,10 @@ def _build_job_query(filters: JobFilters) -> Select:
     else:
         query = query.where(Job.is_hidden == False)
 
+    if filters.posted_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=filters.posted_days)
+        query = query.where(Job.posted_date >= cutoff)
+
     sort_col = getattr(Job, filters.sort_by, Job.created_at)
     if filters.sort_order == "asc":
         query = query.order_by(asc(sort_col))
@@ -49,6 +54,51 @@ def _build_job_query(filters: JobFilters) -> Select:
         query = query.order_by(desc(sort_col))
 
     return query
+
+
+@router.get("/recent", response_model=JobListResponse)
+async def list_recent_jobs(
+    days: int = Query(7, ge=1, le=365),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return jobs posted within the last N days, sorted by posted_date desc."""
+    filters = JobFilters(
+        posted_days=days,
+        sort_by="posted_date",
+        sort_order="desc",
+        page=page,
+        page_size=page_size,
+    )
+
+    query = _build_job_query(filters)
+
+    count_query = select(sa_func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    offset = (filters.page - 1) * filters.page_size
+    query = query.offset(offset).limit(filters.page_size)
+
+    result = await db.execute(query)
+    jobs = result.scalars().all()
+
+    job_responses = []
+    for job in jobs:
+        jr = JobResponse.model_validate(job)
+        board_result = await db.execute(select(JobBoard.name).where(JobBoard.id == job.board_id))
+        jr.board_name = board_result.scalar_one_or_none()
+        app_result = await db.execute(
+            select(Application.status)
+            .where(Application.job_id == job.id)
+            .order_by(Application.created_at.desc())
+            .limit(1)
+        )
+        jr.application_status = app_result.scalar_one_or_none()
+        job_responses.append(jr)
+
+    return JobListResponse(jobs=job_responses, total=total, page=filters.page, page_size=filters.page_size)
 
 
 @router.get("", response_model=JobListResponse)
@@ -60,6 +110,7 @@ async def list_jobs(
     location: str | None = None,
     is_new: bool | None = None,
     is_hidden: bool | None = None,
+    posted_days: int | None = Query(None, ge=1, le=365),
     sort_by: str = "created_at",
     sort_order: str = "desc",
     page: int = Query(1, ge=1),
@@ -74,6 +125,7 @@ async def list_jobs(
         location=location,
         is_new=is_new,
         is_hidden=is_hidden,
+        posted_days=posted_days,
         sort_by=sort_by,
         sort_order=sort_order,
         page=page,

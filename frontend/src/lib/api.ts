@@ -91,5 +91,7 @@ export const applicationsApi = {
   cancel: (id: string) => request<Application>(`/api/applications/${id}/cancel`, { method: "POST" }),
   aiAssist: (id: string) =>
     request<{ answers: Record<string, string> }>(`/api/applications/${id}/ai-assist`, { method: "POST" }),
+  openBrowser: (id: string) =>
+    request<{ task_id: string; message: string }>(`/api/applications/${id}/open-browser`, { method: "POST" }),
   dashboard: () => request<DashboardStats>("/api/applications/dashboard"),
 };

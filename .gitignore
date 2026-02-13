@@ -57,3 +57,5 @@ playwright-report/
 test-results/
 
 *.txt
+
+CLAUDE.md
