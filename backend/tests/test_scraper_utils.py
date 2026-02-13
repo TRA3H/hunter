@@ -1,6 +1,7 @@
 import sys
+import os
 
-sys.path.insert(0, "/home/traeh/Dev/projects/hunter")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

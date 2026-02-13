@@ -291,14 +291,93 @@ Imports all models to register them with SQLAlchemy metadata, then runs Alembic 
 
 ## Tests (`tests/`)
 
-Pytest with async support (`conftest.py` sets up an async test database session).
+Pytest with async support. Unit tests mock Playwright elements; integration tests use an in-memory SQLite database with `@compiles` hooks mapping PostgreSQL types (JSONB, TSVECTOR, UUID) to SQLite equivalents.
 
-- `test_scanner.py` — dedup hash computation, salary parsing, job storage
-- `test_matcher.py` — scoring algorithm, keyword matching, location scoring
-- `test_autofill.py` — field detection patterns, confidence thresholds
+### `conftest.py` — Shared Fixtures
 
-Run with:
+Provides reusable test data across all test files:
+- **`sample_profile`** — a `UserProfile` instance with realistic fields (name, email, desired title, locations, remote preference, salary)
+- **`sample_job`** — a `Job` instance with a full description containing keywords (Python, React, FastAPI, PostgreSQL, Docker)
+- **`sample_raw_jobs`** — a list of 3 raw job dicts simulating scraper output (Backend Engineer, Frontend Developer, DevOps Engineer) with varying salary formats and optional fields
+
+### `test_scanner.py` — Dedup Hash + Salary Parsing (15 tests)
+
+Tests the two core scanner utilities:
+- **`TestComputeDedupHash`** (6 tests) — verifies URL-based deduplication (same URL = same hash regardless of title/company), URL normalization (trailing slash, case insensitivity), and fallback to title+company hashing when URL is empty
+- **`TestParseSalary`** (9 tests) — validates salary string parsing across formats: `$80,000 - $120,000`, `$100K - $150K`, `100k - 150k`, single values, empty strings, non-numeric text ("Competitive"), and `to`/en-dash separators
+
+### `test_matcher.py` — Job Scoring Algorithm (13 tests)
+
+Tests each scoring component and the weighted combination:
+- **`TestComputeKeywordScore`** (5 tests) — keyword frequency scoring: 100% when all match, 50% for half, 0% for none, 0% for empty keyword list, case-insensitive matching
+- **`TestComputeTitleSimilarity`** (4 tests) — token overlap between job title and desired title: exact match = 100, partial overlap in 50-80 range, no overlap = 0, empty desired = 0
+- **`TestComputeLocationScore`** (6 tests) — location matching: "Remote" with remote preference = 100, city substring match = 100, no match = 0, no preference = 50, remote with "any" preference = 100
+- **`TestComputeMatchScore`** (3 tests) — end-to-end weighted score (40% keyword + 35% title + 25% location): high match >= 70, low match < 30, score always in 0-100 bounds
+
+### `test_autofill.py` — Form Detection + Profile Mapping (17 tests)
+
+Tests the auto-fill engine's field detection heuristics and profile value extraction:
+- **`TestDetectFieldType`** (10 tests) — pattern matching from HTML attributes (tag, type, label, name, placeholder, aria-label) to profile field keys: first_name, email, phone, linkedin_url, us_citizen, sponsorship_needed, resume file upload, veteran_status, gender, and unknown fields below confidence threshold
+- **`TestGetProfileValue`** (6 tests) — extracting and formatting profile values: full_name concatenation, email passthrough, boolean→"Yes"/"No" conversion (us_citizen, sponsorship_needed), empty string with 0.0 confidence for missing fields, None boolean handling
+- **`TestHasCaptcha`** (5 tests) — CAPTCHA detection in page HTML: reCAPTCHA (`g-recaptcha`), hCaptcha (`h-captcha`), Cloudflare Turnstile (`cf-turnstile`), no false positives on clean forms, detection in `<script>` tags
+- **`TestNeedsHumanReview`** (3 tests) — review trigger logic: all "filled" = no review, any "needs_input" = review needed, empty field list = no review
+
+### `test_recent_jobs.py` — Jobs API Integration Tests (10 tests)
+
+Full integration tests against the FastAPI app with an in-memory SQLite database:
+- **`TestRecentEndpoint`** (7 tests) — `GET /api/jobs/recent`: default 7-day window, custom `days` param, 30-day window, null `posted_date` exclusion, empty results, pagination (page/page_size), and 422 validation for invalid days (0, -1)
+- **`TestPostedDaysFilter`** (3 tests) — `posted_days` query param on `GET /api/jobs`: filters by recency, omitted param returns all jobs, combines correctly with location filter
+
+### `test_scraper_utils.py` — Scraper Shared Utilities (13 tests)
+
+Tests utility functions shared across all scrapers:
+- **`TestGetRandomUserAgent`** (2 tests) — returns a string from the USER_AGENTS pool, produces variety over many calls
+- **`TestRandomDelay`** (2 tests) — calls `asyncio.sleep` with a value in the specified range, default range is 2-8 seconds
+- **`TestCheckRobotsTxt`** (4 tests) — robots.txt compliance: allowed when `Allow: /`, blocked when `Disallow: /` for HunterBot, 404 returns allowed (assume no restrictions), network errors return allowed (fail open)
+- **`TestExtractDomain`** (5 tests) — domain extraction from URLs: simple, with port, with subdomain, HTTP scheme, with query params
+- **`TestNormalizeUrl`** (5 tests) — URL resolution: absolute returned as-is, protocol-relative (`//`), root-relative (`/path`), relative path with and without trailing slash on base
+
+### `test_generic_scraper.py` — Generic CSS Scraper (14 tests)
+
+Tests the configurable CSS selector-driven scraper:
+- **`TestInstantiation`** (4 tests) — default config values, custom selector merging (overrides only specified keys, keeps defaults for rest), custom pagination type, None selectors fallback
+- **`TestExtractJobs`** (4 tests) — single job extraction with all fields, multiple jobs, skipping cards without title, custom selector usage verification
+- **`TestExtractJobsEmpty`** (1 test) — empty result when both primary and fallback selectors return nothing (verifies double query_selector_all call)
+- **`TestPaginateClick`** (4 tests) — click pagination: enabled next button clicks and waits, disabled attribute stops pagination, "disabled" CSS class stops pagination, missing button returns false
+- **`TestPaginateScroll`** (2 tests) — infinite scroll: height change = more content, unchanged height = end of results
+- **`TestPaginateUrl`** (2 tests) — URL param pagination falls back to click behavior, unknown pagination type returns false
+
+### `test_lever_scraper.py` — Lever ATS Scraper (12 tests)
+
+Tests the Lever job board scraper with mocked Playwright elements:
+- **`TestImportAndInstantiation`** (3 tests) — import works, base_url set, inherits BaseScraper
+- **`TestExtractJobsStandardPostings`** (4 tests) — standard `.posting` elements with title/link/location/team/commitment, postings missing optional fields, title fallback to anchor text, href fallback to `evaluate()`
+- **`TestExtractJobsFallbackToLinks`** (3 tests) — fallback to `a[href*="/jobs/"]` links when no `.posting` elements found, short titles (<=3 chars) filtered out, exception handling skips bad links
+- **`TestExtractJobsNoPostings`** (1 test) — all selectors empty = empty result
+- **`TestCompanyNameExtraction`** (2 tests) — company from page header applied to all jobs, missing company element = empty string
+- **`TestGoToNextPage`** (2 tests) — always returns false (Lever is single-page)
+
+### `test_workday_scraper.py` — Workday ATS Scraper (14 tests)
+
+Tests the Workday job board scraper (the most complex due to Workday's JS-heavy rendering):
+- **`TestExtractJobs`** (8 tests) — card extraction with anchor tags, non-anchor tag handling (falls back to nested `a`), empty results, skipping cards without href or title, fallback selector strategy, timeout resilience, company name applied to all jobs, exception in one card doesn't break others
+- **`TestGoToNextPage`** (6 tests) — "Show More" button click, disabled Show More falls through, next arrow button click, disabled next arrow, no pagination buttons, exception returns false
+- **`TestInstantiation`** (3 tests) — import and creation, custom config (max_pages), inherits BaseScraper
+
+### `test_greenhouse_scraper.py` — Greenhouse ATS Scraper (14 tests)
+
+Tests the Greenhouse job board scraper:
+- **`TestInstantiation`** (4 tests) — inherits BaseScraper, base_url set, default config, custom config
+- **`TestExtractJobsStandardSections`** (5 tests) — single job from section, multiple jobs, no location element, section without link skipped, secondary selector fallback when primary empty
+- **`TestExtractJobsFallbackLinks`** (5 tests) — fallback to `a[href*="/jobs/"]` links, fallback jobs have empty non-title fields, empty title skipped, no href skipped, exception in one link doesn't break others
+- **`TestExtractJobsEmpty`** (1 test) — no jobs found = empty list
+- **`TestCompanyNameExtraction`** (4 tests) — company applied to all section jobs, no company element = empty, whitespace-only company = empty, company not applied for fallback link path
+- **`TestGoToNextPage`** (2 tests) — always returns false (Greenhouse is single-page)
+
+### Running Tests
 
 ```bash
 cd backend && pytest tests/ -v
 ```
+
+**Note:** Scraper tests (test_generic_scraper, test_lever_scraper, etc.) require `playwright` Python package installed. Integration tests (test_recent_jobs) require `aiosqlite` and `httpx`. Neither requires a running PostgreSQL or Redis instance.

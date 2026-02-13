@@ -238,8 +238,28 @@ Supported scraper types: `generic`, `workday`, `greenhouse`, `lever`
 
 ```bash
 cd backend
-pytest tests/ -v
+pytest tests/ -v                                    # All tests
+pytest tests/test_scanner.py -v                     # Single file
+pytest tests/test_scanner.py::TestParseSalary -v    # Single class
 ```
+
+**122 tests** across 8 test files covering:
+
+| Test File | What It Tests | Test Count |
+|---|---|---|
+| `test_scanner.py` | Dedup hash computation, salary string parsing | 15 |
+| `test_matcher.py` | Keyword scoring, title similarity, location matching, weighted score | 13 |
+| `test_autofill.py` | Form field detection heuristics, profile value mapping, CAPTCHA detection | 17 |
+| `test_recent_jobs.py` | `GET /api/jobs/recent` endpoint, `posted_days` filter (integration, in-memory SQLite) | 10 |
+| `test_scraper_utils.py` | User agent rotation, robots.txt compliance, URL normalization | 13 |
+| `test_generic_scraper.py` | CSS selector extraction, click/scroll/URL pagination | 14 |
+| `test_lever_scraper.py` | Lever ATS posting extraction, fallback strategies | 12 |
+| `test_workday_scraper.py` | Workday SPA extraction, Show More/next page pagination | 14 |
+| `test_greenhouse_scraper.py` | Greenhouse section extraction, fallback link path | 14 |
+
+No running PostgreSQL or Redis required — unit tests mock Playwright, integration tests use in-memory SQLite with PG type compatibility hooks.
+
+See [backend/README.md](backend/README.md#tests-tests) for detailed per-test documentation.
 
 ## Tech Stack
 
