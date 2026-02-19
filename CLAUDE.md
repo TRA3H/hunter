@@ -41,7 +41,7 @@ Requires PostgreSQL 16 (port 5432) and Redis 7 (port 6379) when running locally.
 - **Queue:** Celery + Redis (broker & result backend)
 - **Scraping:** Playwright (Python, headless Chromium)
 - **DB:** PostgreSQL with tsvector full-text search (GIN index, auto-update trigger)
-- **AI:** Anthropic Claude API for free-text application answers
+- **AI:** Anthropic Claude API (model configurable via `ANTHROPIC_MODEL` env var)
 
 ### Data Flow: Job Scanning
 1. Celery beat runs `check_scan_schedules()` every 60s
@@ -55,22 +55,22 @@ Requires PostgreSQL 16 (port 5432) and Redis 7 (port 6379) when running locally.
 Celery workers can't send WebSocket messages directly. Instead:
 - Workers call `broadcast_sync()` which publishes to Redis channel `hunter:ws_broadcast`
 - FastAPI background task `ws_listener()` subscribes and forwards to connected WebSocket clients
-- Event types: `new_job`, `application_update`, `scan_error`
+- Event types: `new_job`, `scan_error`
 
-### Auto-Apply Flow
-Auto-apply NEVER submits without user confirmation. It pauses at `needs_review` status if confidence is low or CAPTCHA is detected, takes a screenshot, and waits for explicit user approval before submitting.
+### Application Tracking
+Applications are tracked through these statuses: `applied`, `interviewing`, `offered`, `rejected`, `withdrawn`, `archived`. Users log applications manually (or via future Chrome extension) and update status as they progress. Full activity log tracks every change.
 
 ### Backend Structure
 - `app/models/` — SQLAlchemy ORM (UUID PKs, `Mapped[T]` annotations, `created_at`/`updated_at` on all tables)
 - `app/schemas/` — Pydantic request/response schemas
 - `app/api/` — Route handlers (async, DB via `Depends(get_db)`)
-- `app/services/` — Business logic (scanner, matcher, notifier, autofill, ai_assistant)
-- `app/tasks/` — Celery tasks (scan_tasks, apply_tasks, celery_app config)
+- `app/services/` — Business logic (scanner, matcher, notifier, ai_assistant)
+- `app/tasks/` — Celery tasks (scan_tasks, celery_app config)
 - `app/config.py` — `pydantic-settings` loading from `.env`
 
 ### Frontend Structure
-- `src/pages/` — Route-level components (Dashboard, Boards, Jobs, AutoApply, Profile, Settings)
-- `src/lib/api.ts` — Type-safe REST client organized by resource (`boardsApi`, `jobsApi`, etc.)
+- `src/pages/` — Route-level components (Dashboard, Boards, Jobs, Applications, Profile, Settings)
+- `src/lib/api.ts` — Type-safe REST client organized by resource (`boardsApi`, `jobsApi`, `applicationsApi`, etc.)
 - `src/hooks/` — `useWebSocket` (connection manager), `useJobs` (data fetching)
 - `src/types/index.ts` — TypeScript interfaces (manually synced with backend Pydantic schemas)
 - Path alias: `@/*` → `./src/*`

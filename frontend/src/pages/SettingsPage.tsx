@@ -11,13 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Bell,
-  Send,
   Clock,
   Download,
   Trash2,
   Save,
   Settings,
 } from "lucide-react";
+import { jobsApi } from "@/lib/api";
 
 const STORAGE_KEY = "hunter_settings";
 
@@ -26,10 +26,6 @@ interface HunterSettings {
   notificationEmail: string;
   alertMode: "instant" | "digest";
   minMatchScoreAlerts: number;
-
-  autoApplyEnabled: boolean;
-  autoApplyMinScore: number;
-  requireReview: boolean;
 
   scanOnStartup: boolean;
   activeHoursOnly: boolean;
@@ -42,10 +38,6 @@ const DEFAULT_SETTINGS: HunterSettings = {
   notificationEmail: "",
   alertMode: "instant",
   minMatchScoreAlerts: 70,
-
-  autoApplyEnabled: false,
-  autoApplyMinScore: 75,
-  requireReview: true,
 
   scanOnStartup: true,
   activeHoursOnly: false,
@@ -156,9 +148,7 @@ export default function SettingsPage() {
 
   const handleExportData = async () => {
     try {
-      const response = await fetch("/api/jobs?page_size=9999");
-      if (!response.ok) throw new Error("Export failed");
-      const data = await response.json();
+      const data = await jobsApi.list({ page_size: 9999 });
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: "application/json",
       });
@@ -298,66 +288,6 @@ export default function SettingsPage() {
               <span>0%</span>
               <span>100%</span>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Auto-Apply Settings */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Send className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>Auto-Apply Settings</CardTitle>
-          </div>
-          <CardDescription>
-            Configure automatic job application behavior
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Enable Auto-Apply</p>
-              <p className="text-xs text-muted-foreground">
-                Automatically apply to jobs that meet your criteria
-              </p>
-            </div>
-            <Toggle
-              checked={settings.autoApplyEnabled}
-              onChange={(val) => update("autoApplyEnabled", val)}
-              label="Enable auto-apply"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Minimum Match Score Threshold</p>
-              <Badge variant="outline">{settings.autoApplyMinScore}%</Badge>
-            </div>
-            <Slider
-              value={settings.autoApplyMinScore}
-              onChange={(val) => update("autoApplyMinScore", val)}
-              min={50}
-              max={100}
-              label="Auto-apply minimum match score"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>50%</span>
-              <span>100%</span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Require Review Before Submit</p>
-              <p className="text-xs text-muted-foreground">
-                Review each application before it is submitted
-              </p>
-            </div>
-            <Toggle
-              checked={settings.requireReview}
-              onChange={(val) => update("requireReview", val)}
-              label="Require review before submit"
-            />
           </div>
         </CardContent>
       </Card>

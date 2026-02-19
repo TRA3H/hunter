@@ -28,6 +28,8 @@ class GenericScraper(BaseScraper):
         super().__init__(base_url, config)
         self.selectors = {**DEFAULT_SELECTORS, **(self.config.get("selectors") or {})}
         self.pagination_type = self.config.get("pagination_type", "click")
+        self._current_page = 1
+        self._url_page_param = self.config.get("url_page_param", "page")
 
     async def extract_jobs(self, page: Page) -> list[dict]:
         jobs = []
@@ -134,6 +136,7 @@ class GenericScraper(BaseScraper):
 
             await next_btn.click()
             await page.wait_for_load_state("networkidle", timeout=15000)
+            await random_delay()
             return True
         except Exception:
             logger.debug("No next page found")
@@ -152,6 +155,19 @@ class GenericScraper(BaseScraper):
 
     async def _paginate_url(self, page: Page) -> bool:
         """URL parameter-based pagination."""
-        # This would need the current page number tracked externally
-        # For now, fall back to click-based
-        return await self._paginate_click(page)
+        try:
+            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+            self._current_page += 1
+            parsed = urlparse(self.base_url)
+            params = parse_qs(parsed.query)
+            params[self._url_page_param] = [str(self._current_page)]
+            new_query = urlencode(params, doseq=True)
+            next_url = urlunparse(parsed._replace(query=new_query))
+
+            await page.goto(next_url, wait_until="networkidle", timeout=15000)
+            await random_delay()
+            return True
+        except Exception:
+            logger.debug("URL pagination failed")
+            return False

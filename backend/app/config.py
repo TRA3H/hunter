@@ -27,9 +27,6 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
 
-    # Claude API
-    anthropic_api_key: str = ""
-
     # Logging
     log_level: str = "INFO"
 

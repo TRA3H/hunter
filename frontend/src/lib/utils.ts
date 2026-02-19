@@ -54,10 +54,12 @@ export function scoreBgColor(score: number): string {
 
 export function statusColor(status: string): string {
   switch (status) {
-    case "submitted": return "bg-green-500/10 text-green-500";
-    case "needs_review": return "bg-yellow-500/10 text-yellow-500";
-    case "in_progress": case "pending": return "bg-blue-500/10 text-blue-500";
-    case "failed": case "cancelled": return "bg-red-500/10 text-red-500";
+    case "applied": return "bg-blue-500/10 text-blue-500";
+    case "interviewing": return "bg-yellow-500/10 text-yellow-500";
+    case "offered": return "bg-green-500/10 text-green-500";
+    case "rejected": return "bg-red-500/10 text-red-500";
+    case "withdrawn": return "bg-muted text-muted-foreground";
+    case "archived": return "bg-muted text-muted-foreground";
     default: return "bg-muted text-muted-foreground";
   }
 }

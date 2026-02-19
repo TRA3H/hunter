@@ -70,7 +70,7 @@ function JobsPage() {
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchInput]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchInput, filters.search, updateFilters]);
 
   const handleHide = useCallback(
     async (job: Job) => {
@@ -102,16 +102,28 @@ function JobsPage() {
     [refresh]
   );
 
-  const handleAutoApply = useCallback(async (jobId: string) => {
-    setApplyingJobId(jobId);
-    try {
-      await applicationsApi.create(jobId);
-    } catch {
-      // silently fail
-    } finally {
-      setApplyingJobId(null);
-    }
-  }, []);
+  const handleToggleApplied = useCallback(
+    async (job: Job) => {
+      setApplyingJobId(job.id);
+      try {
+        if (job.application_status) {
+          // Find and delete the application
+          const res = await applicationsApi.list("", "", job.id);
+          if (res.applications.length > 0) {
+            await applicationsApi.delete(res.applications[0].id);
+          }
+        } else {
+          await applicationsApi.create({ job_id: job.id });
+        }
+        refresh();
+      } catch {
+        // silently fail
+      } finally {
+        setApplyingJobId(null);
+      }
+    },
+    [refresh]
+  );
 
   const handleLocationCommit = useCallback(() => {
     if (localLocation !== (filters.location ?? "")) {
@@ -491,10 +503,12 @@ function JobsPage() {
 
                         <Button
                           size="sm"
-                          disabled={isApplying || !!job.application_status}
+                          variant={job.application_status ? "default" : "outline"}
+                          className={job.application_status ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                          disabled={isApplying}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAutoApply(job.id);
+                            handleToggleApplied(job);
                           }}
                         >
                           {isApplying ? (
@@ -503,8 +517,8 @@ function JobsPage() {
                             <Send className="mr-1.5 h-3.5 w-3.5" />
                           )}
                           {job.application_status
-                            ? "Applied"
-                            : "Auto-Apply"}
+                            ? "Applied \u2713"
+                            : "Mark Applied"}
                         </Button>
 
                         {job.url && (

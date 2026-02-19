@@ -3,7 +3,6 @@ import type {
   Board,
   BoardCreate,
   DashboardStats,
-  FormField,
   Job,
   JobFilters,
   JobListResponse,
@@ -76,22 +75,22 @@ export const profileApi = {
 
 // Applications
 export const applicationsApi = {
-  list: (status?: string) => {
-    const params = status ? `?status=${status}` : "";
-    return request<{ applications: Application[]; total: number }>(`/api/applications${params}`);
+  list: (status?: string, search?: string, job_id?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (search) params.set("search", search);
+    if (job_id) params.set("job_id", job_id);
+    const qs = params.toString();
+    return request<{ applications: Application[]; total: number }>(`/api/applications${qs ? `?${qs}` : ""}`);
   },
   get: (id: string) => request<Application>(`/api/applications/${id}`),
-  create: (jobId: string) =>
-    request<Application>("/api/applications", { method: "POST", body: JSON.stringify({ job_id: jobId }) }),
-  review: (id: string, fields: FormField[]) =>
-    request<Application>(`/api/applications/${id}/review`, {
-      method: "POST",
-      body: JSON.stringify({ form_fields: fields }),
-    }),
-  cancel: (id: string) => request<Application>(`/api/applications/${id}/cancel`, { method: "POST" }),
-  aiAssist: (id: string) =>
-    request<{ answers: Record<string, string> }>(`/api/applications/${id}/ai-assist`, { method: "POST" }),
-  openBrowser: (id: string) =>
-    request<{ task_id: string; message: string }>(`/api/applications/${id}/open-browser`, { method: "POST" }),
+  create: (data: { job_id?: string; status?: string; notes?: string; applied_via?: string }) =>
+    request<Application>("/api/applications", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: { status?: string; notes?: string }) =>
+    request<Application>(`/api/applications/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  delete: (id: string) => request<void>(`/api/applications/${id}`, { method: "DELETE" }),
+  archive: (id: string) => request<Application>(`/api/applications/${id}/archive`, { method: "POST" }),
+  bulkDelete: (ids: string[]) =>
+    request<void>("/api/applications/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) }),
   dashboard: () => request<DashboardStats>("/api/applications/dashboard"),
 };

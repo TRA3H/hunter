@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import boards, jobs, profile, autoapply, websocket
+from app.api import boards, jobs, profile, applications, websocket
 from app.api.websocket import ws_listener
 from app.config import settings
 
@@ -56,7 +56,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(boards.router)
 app.include_router(jobs.router)
 app.include_router(profile.router)
-app.include_router(autoapply.router)
+app.include_router(applications.router)
 app.include_router(websocket.router)
 
 

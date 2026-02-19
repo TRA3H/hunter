@@ -80,12 +80,13 @@ services:
     volumes:
       - ./backend:/srv
       - ./scrapers:/opt/scrapers
+      - celerybeat_schedule:/srv/celerybeat-schedule
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A app.tasks.celery_app beat --loglevel=info
+    command: celery -A app.tasks.celery_app beat --loglevel=info --schedule=/srv/celerybeat-schedule/celerybeat-schedule
 
   frontend:
     build:
@@ -106,3 +107,4 @@ volumes:
   pgdata:
   redisdata:
   upload_data:
+  celerybeat_schedule:

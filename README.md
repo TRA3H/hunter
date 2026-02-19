@@ -1,6 +1,6 @@
 # Hunter - Job Search Automation
 
-A self-hosted, single-user platform that automates your entire job search pipeline — from discovering listings across multiple job boards, to scoring them against your preferences, to filling out and submitting applications with human-in-the-loop review. Everything runs locally via Docker Compose.
+A self-hosted, single-user platform that automates your job search pipeline — from discovering listings across multiple job boards, to scoring them against your preferences, to tracking your applications through every stage. Everything runs locally via Docker Compose.
 
 > **See also:** [backend/README.md](backend/README.md) | [frontend/README.md](frontend/README.md) | [scrapers/README.md](scrapers/README.md) for detailed file-by-file documentation.
 
@@ -30,7 +30,6 @@ graph TB
     subgraph Services
         SCANNER[Scanner Engine]
         MATCHER[Match Scorer]
-        AUTOFILL[Auto-Fill Engine]
         NOTIFIER[Notifier]
         AI[AI Assistant]
     end
@@ -49,13 +48,10 @@ graph TB
     CELERY_W --> REDIS
     CELERY_B --> REDIS
     CELERY_W --> SCANNER
-    CELERY_W --> AUTOFILL
     SCANNER --> GENERIC & WORKDAY & GREENHOUSE & LEVER
     GENERIC & WORKDAY & GREENHOUSE & LEVER --> PW
-    AUTOFILL --> PW
     SCANNER --> MATCHER
     SCANNER --> NOTIFIER
-    AUTOFILL --> AI
     WS_SERVER --> REDIS
     CELERY_W -->|pub/sub| REDIS -->|broadcast| WS_SERVER
 ```
@@ -67,11 +63,13 @@ graph TB
 - **Smart Matching** - Score jobs 0-100 based on keyword overlap, title similarity, location preference
 - **Full-Text Search** - PostgreSQL tsvector/tsrank for fast job searching
 - **Real-Time Updates** - WebSocket push when new jobs are discovered
-- **Auto-Apply Engine** - Playwright-driven form detection, auto-fill, and submission
-- **Human-in-the-Loop** - Bot pauses on uncertain fields, CAPTCHAs, free-text questions for review
-- **AI-Assisted Answers** - Claude API drafts responses to free-text application questions
-- **Email Notifications** - Resend or SMTP alerts for new jobs and review-needed applications
+- **Application Tracker** - Track applications through applied, interviewing, offered, rejected, withdrawn stages
+- **Bulk Operations** - Select and delete/archive multiple applications at once
+- **AI Assistant** - Claude API available for generating answers to application questions
+- **Email Notifications** - Resend or SMTP alerts for new jobs
 - **Dashboard** - Stats, charts, activity feed, real-time status
+
+> **Future:** A Chrome extension (phase 2) will auto-fill application forms in your real browser using your Hunter profile, and log applications back to the tracker.
 
 ## Quick Start
 
@@ -138,11 +136,12 @@ npm run dev
 | `SMTP_PORT` | SMTP server port | `587` |
 | `SMTP_USER` | SMTP username | (empty) |
 | `SMTP_PASSWORD` | SMTP password | (empty) |
-| `ANTHROPIC_API_KEY` | Claude API key for AI-assisted answers | (empty) |
+| `ANTHROPIC_API_KEY` | Claude API key for AI assistant | (empty) |
+| `ANTHROPIC_MODEL` | Claude model to use | `claude-sonnet-4-20250514` |
 | `SECRET_KEY` | Application secret key | `change-this...` |
 | `BACKEND_CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:5173` |
 | `LOG_LEVEL` | Logging level | `INFO` |
-| `PLAYWRIGHT_HEADLESS` | Run browser in headless mode | `true` |
+| `PLAYWRIGHT_HEADLESS` | Run scraper browser in headless mode | `true` |
 
 ## Docker Services
 
@@ -180,16 +179,27 @@ npm run dev
 - `DELETE /api/profile/experience/{id}` - Remove work experience
 
 ### Applications
-- `GET /api/applications` - List applications (optional: ?status=needs_review)
-- `GET /api/applications/{id}` - Get application details with logs
-- `POST /api/applications` - Start auto-apply for a job
-- `POST /api/applications/{id}/review` - Submit reviewed form fields
-- `POST /api/applications/{id}/cancel` - Cancel application
-- `POST /api/applications/{id}/ai-assist` - Request AI-generated answers
+- `GET /api/applications` - List applications (optional filters: ?status=applied&search=google)
+- `GET /api/applications/{id}` - Get application details with activity log
+- `POST /api/applications` - Log a new application
+- `PATCH /api/applications/{id}` - Update status or notes
+- `DELETE /api/applications/{id}` - Delete an application
+- `POST /api/applications/{id}/archive` - Archive an application
+- `POST /api/applications/bulk-delete` - Bulk delete applications
 - `GET /api/applications/dashboard` - Dashboard statistics
 
 ### WebSocket
-- `ws://localhost:8000/ws` - Real-time events (new_job, application_update, scan_error)
+- `ws://localhost:8000/ws` - Real-time events (new_job, scan_error)
+
+## Application Tracking Flow
+
+1. User finds a job they want to apply to (via Hunter or externally)
+2. User applies manually (or via future Chrome extension)
+3. Logs the application in Hunter with status "Applied"
+4. Updates status as it progresses: Applied → Interviewing → Offered/Rejected/Withdrawn
+5. Adds notes (interview dates, contact info, follow-up reminders)
+6. Archives old applications to keep the tracker clean
+7. Full activity log tracks every status change
 
 ## Scraper Configuration
 
@@ -214,26 +224,6 @@ When adding a board, configure the scraper via `scraper_config`:
 
 Supported scraper types: `generic`, `workday`, `greenhouse`, `lever`
 
-## Auto-Apply Flow
-
-1. User clicks "Auto-Apply" on a job
-2. Celery task launches Playwright browser
-3. Navigates to job application URL
-4. Detects form fields via heuristics (labels, names, placeholders, aria-labels)
-5. Auto-fills from user profile with confidence scoring
-6. If any field has confidence below threshold, or CAPTCHA detected:
-   - **Pauses** the application
-   - Takes screenshot
-   - Saves form state
-   - Notifies user via WebSocket and email
-7. User reviews in the Auto-Apply UI:
-   - Sees screenshot and field statuses
-   - Fills in missing fields
-   - Optionally requests AI-generated answers
-   - Clicks "Submit Application"
-8. Bot resumes, fills reviewed fields, clicks submit
-9. Full audit log recorded throughout
-
 ## Testing
 
 ```bash
@@ -243,23 +233,7 @@ pytest tests/test_scanner.py -v                     # Single file
 pytest tests/test_scanner.py::TestParseSalary -v    # Single class
 ```
 
-**122 tests** across 8 test files covering:
-
-| Test File | What It Tests | Test Count |
-|---|---|---|
-| `test_scanner.py` | Dedup hash computation, salary string parsing | 15 |
-| `test_matcher.py` | Keyword scoring, title similarity, location matching, weighted score | 13 |
-| `test_autofill.py` | Form field detection heuristics, profile value mapping, CAPTCHA detection | 17 |
-| `test_recent_jobs.py` | `GET /api/jobs/recent` endpoint, `posted_days` filter (integration, in-memory SQLite) | 10 |
-| `test_scraper_utils.py` | User agent rotation, robots.txt compliance, URL normalization | 13 |
-| `test_generic_scraper.py` | CSS selector extraction, click/scroll/URL pagination | 14 |
-| `test_lever_scraper.py` | Lever ATS posting extraction, fallback strategies | 12 |
-| `test_workday_scraper.py` | Workday SPA extraction, Show More/next page pagination | 14 |
-| `test_greenhouse_scraper.py` | Greenhouse section extraction, fallback link path | 14 |
-
-No running PostgreSQL or Redis required — unit tests mock Playwright, integration tests use in-memory SQLite with PG type compatibility hooks.
-
-See [backend/README.md](backend/README.md#tests-tests) for detailed per-test documentation.
+Tests cover scrapers, scanner, matcher, and API endpoints. No running PostgreSQL or Redis required — unit tests mock Playwright, integration tests use in-memory SQLite with PG type compatibility hooks.
 
 ## Tech Stack
 

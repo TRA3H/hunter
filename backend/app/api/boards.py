@@ -69,6 +69,7 @@ async def delete_board(board_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     if not board:
         raise HTTPException(status_code=404, detail="Board not found")
     await db.delete(board)
+    await db.commit()
 
 
 @router.post("/{board_id}/scan", response_model=dict)

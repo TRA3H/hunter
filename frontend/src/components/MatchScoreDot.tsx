@@ -4,9 +4,9 @@ interface MatchScoreDotProps {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 85) return "#22c55e";
-  if (score >= 70) return "#f59e0b";
-  return "#6b7280";
+  if (score >= 70) return "#22c55e";
+  if (score >= 40) return "#f59e0b";
+  return "#ef4444";
 }
 
 export default function MatchScoreDot({ score, size = "sm" }: MatchScoreDotProps) {

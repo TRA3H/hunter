@@ -12,10 +12,6 @@ playwright==1.49.1
 httpx==0.28.1
 python-multipart==0.0.19
 resend==2.5.1
-anthropic==0.40.0
-pillow==11.0.0
-python-jose==3.3.0
-passlib==1.7.4
 aiofiles==24.1.0
 structlog==24.4.0
 tenacity==9.0.0

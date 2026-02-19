@@ -92,6 +92,7 @@ async def delete_education(edu_id: uuid.UUID, db: AsyncSession = Depends(get_db)
     if not edu:
         raise HTTPException(status_code=404, detail="Education entry not found")
     await db.delete(edu)
+    await db.commit()
 
 
 @router.post("/experience", response_model=WorkExperienceResponse, status_code=201)
@@ -111,3 +112,4 @@ async def delete_experience(exp_id: uuid.UUID, db: AsyncSession = Depends(get_db
     if not exp:
         raise HTTPException(status_code=404, detail="Experience entry not found")
     await db.delete(exp)
+    await db.commit()

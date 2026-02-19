@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { jobsApi } from "@/lib/api";
 import type { Job, JobFilters, JobListResponse } from "@/types";
 
@@ -7,23 +7,25 @@ export function useJobs(initialFilters?: JobFilters) {
   const [filters, setFilters] = useState<JobFilters>(initialFilters || {});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   const fetchJobs = useCallback(async (f?: JobFilters) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await jobsApi.list(f || filters);
+      const result = await jobsApi.list(f || filtersRef.current);
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to fetch jobs");
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, []);
 
   useEffect(() => {
-    fetchJobs();
-  }, [fetchJobs]);
+    fetchJobs(filters);
+  }, [filters, fetchJobs]);
 
   const updateFilters = useCallback((newFilters: Partial<JobFilters>) => {
     setFilters((prev) => ({ ...prev, ...newFilters, page: newFilters.page ?? 1 }));

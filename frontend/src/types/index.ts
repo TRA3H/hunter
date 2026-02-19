@@ -121,49 +121,34 @@ export interface Profile {
 }
 
 // Application types
-export interface FormField {
-  field_name: string;
-  field_type: string;
-  label: string;
-  value: string;
-  confidence: number;
-  status: "filled" | "needs_input";
-  options: string[];
-}
-
 export type ApplicationStatus =
-  | "pending"
-  | "in_progress"
-  | "needs_review"
-  | "ready_to_submit"
-  | "submitted"
-  | "failed"
-  | "cancelled";
+  | "applied"
+  | "interviewing"
+  | "offered"
+  | "rejected"
+  | "withdrawn"
+  | "archived";
 
 export interface ApplicationLog {
   id: string;
   action: string;
   details: string;
-  screenshot_path: string;
   timestamp: string;
 }
 
 export interface Application {
   id: string;
-  job_id: string;
+  job_id: string | null;
   status: ApplicationStatus;
-  form_fields: FormField[] | null;
-  screenshot_path: string;
-  current_page_url: string;
-  ai_answers: Record<string, string> | null;
-  error_message: string;
-  celery_task_id: string;
+  notes: string;
+  applied_via: string;
   created_at: string;
   updated_at: string;
-  submitted_at: string | null;
   logs: ApplicationLog[];
   job_title?: string;
   job_company?: string;
+  job_url?: string;
+  match_score?: number;
 }
 
 // Dashboard types
@@ -171,10 +156,8 @@ export interface DashboardStats {
   active_boards: number;
   total_jobs: number;
   new_jobs: number;
-  in_progress_applications: number;
-  needs_review_applications: number;
-  submitted_applications: number;
   total_applications: number;
+  applications_by_status: Record<string, number>;
   jobs_by_board: { board: string; count: number }[];
   applications_over_time: { date: string; count: number }[];
   recent_activity: { action: string; details: string; timestamp: string }[];

@@ -9,7 +9,6 @@ celery = Celery(
     backend=settings.redis_url,
     include=[
         "app.tasks.scan_tasks",
-        "app.tasks.apply_tasks",
     ],
 )
 

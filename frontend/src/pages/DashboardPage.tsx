@@ -3,8 +3,8 @@ import {
   Activity,
   BarChart3,
   BriefcaseBusiness,
+  ClipboardList,
   Radar,
-  Send,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -156,16 +156,16 @@ function DashboardPage({ notifications }: DashboardPageProps) {
       bgColor: "bg-blue-500/10",
     },
     {
-      title: "In-Progress",
-      value: stats.in_progress_applications,
-      icon: TrendingUp,
+      title: "Applications",
+      value: stats.total_applications,
+      icon: ClipboardList,
       color: "text-amber-500",
       bgColor: "bg-amber-500/10",
     },
     {
-      title: "Submitted",
-      value: stats.submitted_applications,
-      icon: Send,
+      title: "Interviewing",
+      value: stats.applications_by_status?.interviewing ?? 0,
+      icon: TrendingUp,
       color: "text-green-500",
       bgColor: "bg-green-500/10",
     },
@@ -210,16 +210,6 @@ function DashboardPage({ notifications }: DashboardPageProps) {
               {card.title === "New Jobs" && stats.total_jobs > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
                   of {stats.total_jobs} total
-                </p>
-              )}
-              {card.title === "In-Progress" && stats.needs_review_applications > 0 && (
-                <p className="text-xs text-amber-500 mt-1">
-                  {stats.needs_review_applications} need review
-                </p>
-              )}
-              {card.title === "Submitted" && stats.total_applications > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  of {stats.total_applications} total applications
                 </p>
               )}
             </CardContent>

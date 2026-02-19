@@ -7,8 +7,7 @@ import {
   LayoutDashboard,
   Radar,
   Settings,
-  Send,
-  Wifi,
+  ClipboardList,
   WifiOff,
 } from "lucide-react";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -17,7 +16,7 @@ import type { WSEvent } from "@/types";
 import DashboardPage from "@/pages/DashboardPage";
 import BoardsPage from "@/pages/BoardsPage";
 import JobsPage from "@/pages/JobsPage";
-import AutoApplyPage from "@/pages/AutoApplyPage";
+import ApplicationsPage from "@/pages/ApplicationsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import SettingsPage from "@/pages/SettingsPage";
 
@@ -25,7 +24,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/boards", icon: Radar, label: "Boards" },
   { to: "/jobs", icon: BriefcaseBusiness, label: "Jobs" },
-  { to: "/autoapply", icon: Send, label: "Auto-Apply" },
+  { to: "/applications", icon: ClipboardList, label: "Applications" },
   { to: "/profile", icon: FileText, label: "Profile" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
@@ -101,7 +100,7 @@ export default function App() {
           <Route path="/" element={<DashboardPage notifications={notifications} />} />
           <Route path="/boards" element={<BoardsPage />} />
           <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/autoapply" element={<AutoApplyPage />} />
+          <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

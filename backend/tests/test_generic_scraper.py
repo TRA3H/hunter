@@ -319,7 +319,8 @@ class TestPaginateUrl:
 
         result = await scraper.go_to_next_page(page)
         assert result is True
-        next_btn.click.assert_awaited_once()
+        # URL pagination navigates via page.goto instead of clicking
+        page.goto.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_unknown_pagination_type_returns_false(self):

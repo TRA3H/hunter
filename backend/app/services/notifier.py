@@ -120,34 +120,3 @@ def notify_new_jobs(jobs: list[dict]):
         send_email_smtp(subject, html)
 
 
-def notify_application_needs_review(app_id: str, job_title: str, company: str):
-    """Notify user that an application needs manual review."""
-    if not settings.notification_to_email:
-        return
-
-    html = f"""
-    <html>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #ea580c; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
-            <h2 style="margin: 0;">⚠️ Application Needs Your Review</h2>
-        </div>
-        <div style="padding: 20px; background: white;">
-            <p>Your auto-application for <strong>{job_title}</strong> at <strong>{company}</strong> has been paused
-            and needs your input before it can be submitted.</p>
-            <p>The bot encountered form fields it couldn't fill automatically. Please review and complete them.</p>
-            <p style="text-align: center; margin-top: 20px;">
-                <a href="{settings.backend_cors_origins.split(',')[0]}/autoapply"
-                   style="background-color: #2563eb; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-                    Review Application
-                </a>
-            </p>
-        </div>
-    </body>
-    </html>
-    """
-
-    subject = f"Hunter: Review needed - {job_title} at {company}"
-    if settings.resend_api_key:
-        send_email_resend(subject, html)
-    else:
-        send_email_smtp(subject, html)

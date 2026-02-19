@@ -1,5 +1,6 @@
 import abc
 import logging
+import os
 from typing import Any
 
 from playwright.async_api import Browser, Page, async_playwright
@@ -26,7 +27,8 @@ class BaseScraper(abc.ABC):
             return []
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            headless = os.environ.get("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
+            browser = await p.chromium.launch(headless=headless)
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 900},
                 user_agent=get_random_user_agent(),
@@ -59,6 +61,8 @@ class BaseScraper(abc.ABC):
                 logger.exception("Scraping failed for %s", self.base_url)
                 raise
             finally:
+                await page.close()
+                await context.close()
                 await browser.close()
 
     @abc.abstractmethod
