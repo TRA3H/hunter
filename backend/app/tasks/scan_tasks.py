@@ -44,10 +44,28 @@ def _get_scraper_class(scraper_type: str):
         "workday": ("scrapers.workday_scraper", "WorkdayScraper"),
         "greenhouse": ("scrapers.greenhouse_scraper", "GreenhouseScraper"),
         "lever": ("scrapers.lever_scraper", "LeverScraper"),
+        "interactive": ("scrapers.interactive_scraper", "InteractiveScraper"),
     }
     module_path, class_name = scraper_map.get(scraper_type, scraper_map["generic"])
     module = importlib.import_module(module_path)
     return getattr(module, class_name)
+
+
+def _detect_scraper_type(url: str) -> str:
+    """Auto-detect the best scraper type based on URL patterns."""
+    from urllib.parse import urlparse
+
+    host = urlparse(url).netloc.lower()
+
+    if "greenhouse.io" in host:
+        return "greenhouse"
+    if "lever.co" in host:
+        return "lever"
+    if "myworkdayjobs.com" in host:
+        return "workday"
+
+    # Default to interactive (more capable than generic for SPAs)
+    return "interactive"
 
 
 async def _run_scan(board_id: str):
@@ -73,6 +91,21 @@ async def _run_scan(board_id: str):
         try:
             scraper_config = board.scraper_config or {}
             scraper_type = scraper_config.get("scraper_type", "generic")
+
+            # Auto-detect best scraper from URL
+            if scraper_type in ("auto", "generic"):
+                detected = _detect_scraper_type(board.url)
+                if detected != "interactive" or scraper_type == "auto":
+                    # For known ATS platforms, always use the API scraper.
+                    # For "auto" mode, use interactive. For "generic", keep generic
+                    # unless we detected a known ATS platform.
+                    if detected != "interactive":
+                        scraper_type = detected
+                        logger.info("Auto-detected scraper type '%s' for %s", scraper_type, board.url)
+                    elif scraper_type == "auto":
+                        scraper_type = detected
+                        logger.info("Using interactive scraper for %s", board.url)
+
             scraper_class = _get_scraper_class(scraper_type)
             scraper = scraper_class(board.url, scraper_config)
 

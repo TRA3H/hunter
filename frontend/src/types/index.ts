@@ -1,9 +1,28 @@
 // Job Board types
+export interface PreSearchAction {
+  action: "fill" | "click" | "wait" | "scroll" | "select" | "press" | "delay";
+  selector?: string;
+  value?: string;
+  state?: string;
+  wait_selector?: string;
+  key?: string;
+  times?: number;
+  timeout?: number;
+  ms?: number;
+  direction?: string;
+}
+
 export interface ScraperConfig {
-  scraper_type: "generic" | "workday" | "greenhouse" | "lever";
+  scraper_type: "auto" | "generic" | "workday" | "greenhouse" | "lever" | "interactive";
   selectors: Record<string, string>;
   pagination_type: "click" | "url_param" | "infinite_scroll";
   max_pages: number;
+  pre_search_actions?: PreSearchAction[];
+  intercept_patterns?: string[];
+  intercept_job_path?: string;
+  intercept_title_key?: string;
+  intercept_location_key?: string;
+  intercept_url_key?: string;
 }
 
 export interface Board {

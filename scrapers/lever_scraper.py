@@ -1,106 +1,93 @@
 import logging
+from typing import Any
+from urllib.parse import urlparse
 
-from playwright.async_api import Page
+import httpx
 
-from scrapers.base_scraper import BaseScraper
-from scrapers.utils import normalize_url
+from scrapers.utils import get_random_user_agent
 
 logger = logging.getLogger(__name__)
 
+# Lever public API: https://github.com/lever/postings-api
+API_BASE = "https://api.lever.co/v0/postings/{site}"
 
-class LeverScraper(BaseScraper):
-    """Scraper for Lever ATS job boards (jobs.lever.co)."""
 
-    async def extract_jobs(self, page: Page) -> list[dict]:
+def _extract_site(url: str) -> str | None:
+    """Extract the site slug from a Lever URL.
+
+    Supports:
+      - jobs.lever.co/company
+      - jobs.lever.co/company/postings
+    """
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if "lever.co" not in host:
+        return None
+
+    parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if parts:
+        return parts[0]
+
+    return None
+
+
+class LeverScraper:
+    """Scraper for Lever ATS using their free public REST API.
+
+    No browser needed — uses api.lever.co/v0/postings/{site}?mode=json.
+    """
+
+    def __init__(self, base_url: str, config: dict[str, Any] | None = None):
+        self.base_url = base_url
+        self.config = config or {}
+        self.site = self.config.get("site_slug") or _extract_site(base_url)
+
+    async def scrape(self) -> list[dict]:
+        if not self.site:
+            logger.error("Could not extract Lever site slug from %s", self.base_url)
+            return []
+
+        api_url = API_BASE.format(site=self.site)
         jobs = []
 
-        # Lever standard structure
-        postings = await page.query_selector_all(".posting")
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                api_url,
+                params={"mode": "json"},
+                headers={"User-Agent": get_random_user_agent()},
+            )
+            response.raise_for_status()
+            postings = response.json()
 
-        if not postings:
-            # Try alternate selectors
-            postings = await page.query_selector_all('[data-qa="posting-name"]')
-
-        if not postings:
-            # Fallback
-            links = await page.query_selector_all('a[href*="/jobs/"], a[href*="/apply"]')
-            for link in links:
-                try:
-                    title = (await link.inner_text()).strip()
-                    href = await link.get_attribute("href")
-                    if title and href and len(title) > 3:
-                        jobs.append({
-                            "title": title,
-                            "company": "",
-                            "location": "",
-                            "url": normalize_url(href, self.base_url),
-                            "salary": "",
-                            "posted_date": None,
-                            "description": "",
-                        })
-                except Exception:
-                    continue
-            return jobs
+        if not isinstance(postings, list):
+            logger.warning("Unexpected Lever API response type: %s", type(postings))
+            return []
 
         for posting in postings:
-            try:
-                # Title
-                title_el = await posting.query_selector("h5, .posting-name, [data-qa='posting-name']")
-                if not title_el:
-                    title_el = await posting.query_selector("a")
-                if not title_el:
-                    continue
-
-                title = (await title_el.inner_text()).strip()
-
-                # URL
-                link_el = await posting.query_selector("a.posting-title, a[href]")
-                href = await link_el.get_attribute("href") if link_el else None
-                if not href:
-                    href = await posting.evaluate("el => { const a = el.querySelector('a'); return a ? a.href : ''; }")
-
-                if not title or not href:
-                    continue
-
-                # Location
-                location_el = await posting.query_selector(
-                    ".posting-categories .location, .sort-by-location, span.workplaceTypes"
-                )
-                location = (await location_el.inner_text()).strip() if location_el else ""
-
-                # Team/Department
-                team_el = await posting.query_selector(".posting-categories .department, .sort-by-team")
-                team = (await team_el.inner_text()).strip() if team_el else ""
-
-                # Commitment (Full-time, Part-time)
-                commitment_el = await posting.query_selector(".posting-categories .commitment")
-                commitment = (await commitment_el.inner_text()).strip() if commitment_el else ""
-
-                description_parts = [p for p in [team, commitment] if p]
-
-                jobs.append({
-                    "title": title,
-                    "company": "",
-                    "location": location,
-                    "url": normalize_url(href, self.base_url),
-                    "salary": "",
-                    "posted_date": None,
-                    "description": " | ".join(description_parts),
-                })
-
-            except Exception:
-                logger.debug("Failed to extract Lever posting", exc_info=True)
+            title = posting.get("text", "").strip()
+            if not title:
                 continue
 
-        # Extract company name from header
-        company_el = await page.query_selector(".main-header-title h1, .company-name")
-        company_name = (await company_el.inner_text()).strip() if company_el else ""
-        if company_name:
-            for job in jobs:
-                job["company"] = company_name
+            categories = posting.get("categories", {})
+            location = categories.get("location", "")
+            team = categories.get("team", "")
+            commitment = categories.get("commitment", "")
 
+            description_parts = [p for p in [team, commitment] if p]
+            description_plain = posting.get("descriptionPlain", "")[:2000]
+            if description_plain:
+                description_parts.append(description_plain)
+
+            jobs.append({
+                "title": title,
+                "company": "",  # Filled by scan_tasks from board name
+                "location": location,
+                "url": posting.get("hostedUrl", posting.get("applyUrl", "")),
+                "salary": "",
+                "posted_date": None,  # Lever API doesn't expose post dates
+                "description": " | ".join(description_parts) if description_parts else "",
+            })
+
+        logger.info("Lever API returned %d jobs for site '%s'", len(jobs), self.site)
         return jobs
-
-    async def go_to_next_page(self, page: Page) -> bool:
-        # Lever typically shows all positions on one page
-        return False

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatRelativeTime } from "@/lib/utils";
 import { boardsApi } from "@/lib/api";
-import type { Board, BoardCreate, ScraperConfig } from "@/types";
+import type { Board, BoardCreate, ScraperConfig, PreSearchAction } from "@/types";
 import {
   Plus,
   Pencil,
@@ -27,10 +27,22 @@ import {
 } from "lucide-react";
 
 const SCRAPER_TYPES: ScraperConfig["scraper_type"][] = [
+  "auto",
   "generic",
   "workday",
   "greenhouse",
   "lever",
+  "interactive",
+];
+
+const ACTION_TYPES: PreSearchAction["action"][] = [
+  "fill",
+  "click",
+  "wait",
+  "scroll",
+  "select",
+  "press",
+  "delay",
 ];
 
 const PAGINATION_TYPES: ScraperConfig["pagination_type"][] = [
@@ -47,10 +59,16 @@ function emptyFormData(): BoardCreate {
     enabled: true,
     keyword_filters: [],
     scraper_config: {
-      scraper_type: "generic",
+      scraper_type: "auto",
       selectors: {},
       pagination_type: "click",
       max_pages: 5,
+      pre_search_actions: [],
+      intercept_patterns: [],
+      intercept_job_path: "",
+      intercept_title_key: "title",
+      intercept_location_key: "location",
+      intercept_url_key: "url",
     },
   };
 }
@@ -66,6 +84,8 @@ function BoardForm({ initial, onSubmit, submitLabel }: BoardFormProps) {
   const [keywordInput, setKeywordInput] = useState("");
   const [selectorKey, setSelectorKey] = useState("");
   const [selectorValue, setSelectorValue] = useState("");
+  const [newAction, setNewAction] = useState<PreSearchAction>({ action: "fill" });
+  const [interceptInput, setInterceptInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -166,6 +186,54 @@ function BoardForm({ initial, onSubmit, submitLabel }: BoardFormProps) {
       };
     });
   }
+
+  function addAction() {
+    if (!newAction.action) return;
+    setForm((f) => ({
+      ...f,
+      scraper_config: {
+        ...f.scraper_config,
+        pre_search_actions: [...(f.scraper_config.pre_search_actions || []), { ...newAction }],
+      },
+    }));
+    setNewAction({ action: "fill" });
+  }
+
+  function removeAction(index: number) {
+    setForm((f) => ({
+      ...f,
+      scraper_config: {
+        ...f.scraper_config,
+        pre_search_actions: (f.scraper_config.pre_search_actions || []).filter((_, i) => i !== index),
+      },
+    }));
+  }
+
+  function addInterceptPattern() {
+    const pattern = interceptInput.trim();
+    if (pattern) {
+      setForm((f) => ({
+        ...f,
+        scraper_config: {
+          ...f.scraper_config,
+          intercept_patterns: [...(f.scraper_config.intercept_patterns || []), pattern],
+        },
+      }));
+      setInterceptInput("");
+    }
+  }
+
+  function removeInterceptPattern(index: number) {
+    setForm((f) => ({
+      ...f,
+      scraper_config: {
+        ...f.scraper_config,
+        intercept_patterns: (f.scraper_config.intercept_patterns || []).filter((_, i) => i !== index),
+      },
+    }));
+  }
+
+  const isInteractive = form.scraper_config.scraper_type === "interactive";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
@@ -412,6 +480,237 @@ function BoardForm({ initial, onSubmit, submitLabel }: BoardFormProps) {
           )}
         </div>
       </div>
+
+      {isInteractive && (
+        <div className="border-t pt-4 space-y-3">
+          <h4 className="text-sm font-semibold">Interactive Scraper Actions</h4>
+          <p className="text-xs text-muted-foreground">
+            Define the sequence of actions to perform before extracting jobs (e.g. fill search box, click submit).
+          </p>
+
+          {/* Existing actions list */}
+          {(form.scraper_config.pre_search_actions || []).length > 0 && (
+            <div className="space-y-1">
+              {(form.scraper_config.pre_search_actions || []).map((act, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 rounded bg-muted px-2 py-1 text-sm"
+                >
+                  <span className="font-mono font-medium text-xs">{i + 1}.</span>
+                  <Badge variant="secondary" className="text-xs">{act.action}</Badge>
+                  {act.selector && (
+                    <span className="font-mono text-xs text-muted-foreground truncate">
+                      {act.selector}
+                    </span>
+                  )}
+                  {act.value && (
+                    <span className="text-xs truncate">= &quot;{act.value}&quot;</span>
+                  )}
+                  {act.action === "wait" && act.state && (
+                    <span className="text-xs text-muted-foreground">{act.state}</span>
+                  )}
+                  {act.action === "scroll" && (
+                    <span className="text-xs text-muted-foreground">{act.times || 3}x</span>
+                  )}
+                  {act.action === "press" && act.key && (
+                    <span className="text-xs text-muted-foreground">{act.key}</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeAction(i)}
+                    className="ml-auto hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new action */}
+          <div className="space-y-2 rounded border p-2">
+            <div className="flex gap-2">
+              <select
+                value={newAction.action}
+                onChange={(e) => setNewAction({ action: e.target.value as PreSearchAction["action"] })}
+                className="flex h-9 rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                {ACTION_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              {(newAction.action === "fill" || newAction.action === "click" || newAction.action === "select" || newAction.action === "press") && (
+                <Input
+                  value={newAction.selector || ""}
+                  onChange={(e) => setNewAction((a) => ({ ...a, selector: e.target.value }))}
+                  placeholder="CSS selector"
+                  className="flex-1 text-sm"
+                />
+              )}
+              {(newAction.action === "fill" || newAction.action === "select") && (
+                <Input
+                  value={newAction.value || ""}
+                  onChange={(e) => setNewAction((a) => ({ ...a, value: e.target.value }))}
+                  placeholder="Value"
+                  className="flex-1 text-sm"
+                />
+              )}
+              {newAction.action === "press" && (
+                <Input
+                  value={newAction.key || ""}
+                  onChange={(e) => setNewAction((a) => ({ ...a, key: e.target.value }))}
+                  placeholder="Key (e.g. Enter)"
+                  className="w-32 text-sm"
+                />
+              )}
+              {newAction.action === "wait" && (
+                <select
+                  value={newAction.state || "networkidle"}
+                  onChange={(e) => setNewAction((a) => ({ ...a, state: e.target.value }))}
+                  className="flex h-9 rounded-md border border-input bg-transparent px-2 py-1 text-sm"
+                >
+                  <option value="networkidle">Network Idle</option>
+                  <option value="selector">Wait for Selector</option>
+                  <option value="timeout">Fixed Timeout</option>
+                </select>
+              )}
+              {newAction.action === "scroll" && (
+                <Input
+                  type="number"
+                  min={1}
+                  value={newAction.times || 3}
+                  onChange={(e) => setNewAction((a) => ({ ...a, times: parseInt(e.target.value) || 3 }))}
+                  placeholder="Times"
+                  className="w-20 text-sm"
+                />
+              )}
+              {newAction.action === "delay" && (
+                <Input
+                  type="number"
+                  min={100}
+                  step={500}
+                  value={newAction.ms || 2000}
+                  onChange={(e) => setNewAction((a) => ({ ...a, ms: parseInt(e.target.value) || 2000 }))}
+                  placeholder="ms"
+                  className="w-24 text-sm"
+                />
+              )}
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={addAction}>
+              Add Action
+            </Button>
+          </div>
+
+          {/* API Interception */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">API Intercept Patterns</label>
+            <p className="text-xs text-muted-foreground">
+              Capture JSON responses matching URL patterns (e.g. */api/jobs*, */positions*).
+            </p>
+            <div className="flex gap-2">
+              <Input
+                value={interceptInput}
+                onChange={(e) => setInterceptInput(e.target.value)}
+                placeholder="*/api/jobs*"
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addInterceptPattern();
+                  }
+                }}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={addInterceptPattern}>
+                Add
+              </Button>
+            </div>
+            {(form.scraper_config.intercept_patterns || []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {(form.scraper_config.intercept_patterns || []).map((pat, i) => (
+                  <Badge key={i} variant="secondary" className="gap-1 font-mono text-xs">
+                    {pat}
+                    <button
+                      type="button"
+                      onClick={() => removeInterceptPattern(i)}
+                      className="ml-0.5 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Intercept key mapping */}
+          {(form.scraper_config.intercept_patterns || []).length > 0 && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Response Key Mapping</label>
+              <p className="text-xs text-muted-foreground">
+                Dot-separated paths to extract data from intercepted JSON (e.g. data.jobPostings).
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Job list path</label>
+                  <Input
+                    value={form.scraper_config.intercept_job_path || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        scraper_config: { ...f.scraper_config, intercept_job_path: e.target.value },
+                      }))
+                    }
+                    placeholder="e.g. data.jobPostings"
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Title key</label>
+                  <Input
+                    value={form.scraper_config.intercept_title_key || "title"}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        scraper_config: { ...f.scraper_config, intercept_title_key: e.target.value },
+                      }))
+                    }
+                    placeholder="title"
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Location key</label>
+                  <Input
+                    value={form.scraper_config.intercept_location_key || "location"}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        scraper_config: { ...f.scraper_config, intercept_location_key: e.target.value },
+                      }))
+                    }
+                    placeholder="location"
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">URL key</label>
+                  <Input
+                    value={form.scraper_config.intercept_url_key || "url"}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        scraper_config: { ...f.scraper_config, intercept_url_key: e.target.value },
+                      }))
+                    }
+                    placeholder="url"
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex justify-end pt-2">
         <Button type="submit" disabled={submitting}>

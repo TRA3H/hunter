@@ -59,3 +59,5 @@ test-results/
 # Misc text files (keep requirements.txt)
 *.log.txt
 notes*.txt
+
+research/

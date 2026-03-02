@@ -1,130 +1,174 @@
 import logging
+import re
+from typing import Any
+from urllib.parse import urlparse
 
-from playwright.async_api import Page
+import httpx
 
-from scrapers.base_scraper import BaseScraper
-from scrapers.utils import normalize_url, random_delay
+from scrapers.utils import get_random_user_agent
 
 logger = logging.getLogger(__name__)
 
 
-class WorkdayScraper(BaseScraper):
-    """Scraper for Workday ATS job boards (myworkdayjobs.com, wd5.myworkdayjobs.com, etc).
+def _extract_workday_parts(url: str) -> tuple[str, str] | None:
+    """Extract (company, site) from a Workday URL.
 
-    Workday sites are heavily JavaScript-rendered, so we rely on Playwright
-    to wait for dynamic content.
+    Supports:
+      - company.wd5.myworkdayjobs.com/en-US/External
+      - company.wd1.myworkdayjobs.com/External
+      - myworkdayjobs.com/en-US/company/External
+    Returns (tenant, site_id) for the CXS API.
+    """
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    path_parts = [p for p in parsed.path.strip("/").split("/") if p]
+
+    if "myworkdayjobs.com" not in host:
+        return None
+
+    # Subdomain pattern: company.wd5.myworkdayjobs.com
+    subdomain = host.split(".")[0]
+
+    # Filter out locale segments like "en-US", "fr-FR"
+    path_parts = [p for p in path_parts if not re.match(r"^[a-z]{2}-[A-Z]{2}$", p)]
+
+    if subdomain and subdomain != "www" and not subdomain.startswith("wd"):
+        # company.wdN.myworkdayjobs.com/SiteId
+        tenant = subdomain
+        site_id = path_parts[0] if path_parts else "External"
+        return (tenant, site_id)
+
+    # Fallback: try to get from path
+    if len(path_parts) >= 2:
+        return (path_parts[0], path_parts[1])
+    if len(path_parts) == 1:
+        return (path_parts[0], "External")
+
+    return None
+
+
+class WorkdayScraper:
+    """Scraper for Workday ATS using the hidden CXS POST API.
+
+    No browser needed — uses POST to {base}/wday/cxs/{tenant}/{site}/jobs.
     """
 
-    async def extract_jobs(self, page: Page) -> list[dict]:
-        jobs = []
+    def __init__(self, base_url: str, config: dict[str, Any] | None = None):
+        self.base_url = base_url
+        self.config = config or {}
+        self.max_jobs = self.config.get("max_jobs", 200)
 
-        # Wait for job listings to load (Workday is slow)
-        try:
-            await page.wait_for_selector(
-                '[data-automation-id="jobResults"], .css-1q2dra3, section[data-automation-id="jobResults"]',
-                timeout=15000,
-            )
-        except Exception:
-            logger.warning("Workday job results container not found, trying fallback selectors")
+        # Allow explicit config override
+        if self.config.get("workday_tenant") and self.config.get("workday_site"):
+            self._tenant = self.config["workday_tenant"]
+            self._site = self.config["workday_site"]
+        else:
+            parts = _extract_workday_parts(base_url)
+            if parts:
+                self._tenant, self._site = parts
+            else:
+                self._tenant = self._site = None
 
-        await random_delay(1.0, 2.0)
+    def _build_api_url(self) -> str:
+        """Build the CXS API endpoint URL."""
+        parsed = urlparse(self.base_url)
+        # Reconstruct the base host (e.g. company.wd5.myworkdayjobs.com)
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        return f"{base}/wday/cxs/{self._tenant}/{self._site}/jobs"
 
-        # Try multiple selector strategies for Workday
-        job_cards = await page.query_selector_all(
-            '[data-automation-id="jobTitle"], '
-            'a[data-automation-id="jobTitle"], '
-            '.css-19uc56f, '
-            'li[class*="css-"] a[href*="/job/"]'
+    async def scrape(self) -> list[dict]:
+        if not self._tenant or not self._site:
+            logger.error("Could not extract Workday tenant/site from %s", self.base_url)
+            return []
+
+        api_url = self._build_api_url()
+        all_jobs = []
+        offset = 0
+        limit = 20  # Workday API default page size
+
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": get_random_user_agent(),
+            "Accept": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            while offset < self.max_jobs:
+                payload = {
+                    "appliedFacets": {},
+                    "limit": limit,
+                    "offset": offset,
+                    "searchText": "",
+                }
+
+                # Add keyword search if configured
+                search_text = self.config.get("search_text", "")
+                if search_text:
+                    payload["searchText"] = search_text
+
+                try:
+                    response = await client.post(
+                        api_url,
+                        json=payload,
+                        headers=headers,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                except httpx.HTTPStatusError as e:
+                    logger.error("Workday API error %s for %s: %s", e.response.status_code, api_url, e)
+                    break
+                except Exception as e:
+                    logger.error("Workday API request failed for %s: %s", api_url, e)
+                    break
+
+                job_postings = data.get("jobPostings", [])
+                if not job_postings:
+                    break
+
+                parsed_base = urlparse(self.base_url)
+                base_host = f"{parsed_base.scheme}://{parsed_base.netloc}"
+
+                for posting in job_postings:
+                    title = posting.get("title", "").strip()
+                    if not title:
+                        continue
+
+                    # Build job URL from external path
+                    external_path = posting.get("externalPath", "")
+                    if external_path:
+                        job_url = f"{base_host}{external_path}"
+                    else:
+                        job_url = posting.get("absoluteUrl", self.base_url)
+
+                    # Location can be in bulletFields or locationsText
+                    location = ""
+                    for field in posting.get("bulletFields", []):
+                        if isinstance(field, str) and not field.startswith("posted"):
+                            location = field
+                            break
+                    if not location:
+                        location = posting.get("locationsText", "")
+
+                    # Posted date
+                    posted_on = posting.get("postedOn", "")
+
+                    all_jobs.append({
+                        "title": title,
+                        "company": "",  # Filled by scan_tasks from board name
+                        "location": location,
+                        "url": job_url,
+                        "salary": "",
+                        "posted_date": posted_on or None,
+                        "description": "",
+                    })
+
+                total = data.get("total", 0)
+                offset += limit
+                if offset >= total:
+                    break
+
+        logger.info(
+            "Workday API returned %d jobs for %s/%s",
+            len(all_jobs), self._tenant, self._site,
         )
-
-        if not job_cards:
-            # Broader fallback
-            job_cards = await page.query_selector_all('a[href*="/job/"]')
-
-        for card in job_cards:
-            try:
-                tag = await card.evaluate("el => el.tagName.toLowerCase()")
-
-                if tag == "a":
-                    title = (await card.inner_text()).strip()
-                    href = await card.get_attribute("href")
-                else:
-                    title = (await card.inner_text()).strip()
-                    link = await card.query_selector("a")
-                    href = await link.get_attribute("href") if link else None
-
-                if not title or not href:
-                    continue
-
-                # Try to find sibling/parent elements for location and other data
-                parent = await card.evaluate(
-                    """el => {
-                        let p = el.closest('li') || el.parentElement?.parentElement;
-                        if (!p) return {};
-                        let texts = Array.from(p.querySelectorAll('dd, [data-automation-id="locations"], .css-129m7dg'))
-                            .map(e => e.textContent.trim());
-                        return { texts };
-                    }"""
-                )
-
-                texts = parent.get("texts", []) if parent else []
-                location = texts[0] if texts else ""
-
-                jobs.append({
-                    "title": title,
-                    "company": "",
-                    "location": location,
-                    "url": normalize_url(href, self.base_url),
-                    "salary": "",
-                    "posted_date": None,
-                    "description": "",
-                })
-
-            except Exception:
-                logger.debug("Failed to extract Workday job card", exc_info=True)
-                continue
-
-        # Try to extract company name
-        company_el = await page.query_selector(
-            '[data-automation-id="orgName"], .css-1oyvp5d, header h1'
-        )
-        company_name = (await company_el.inner_text()).strip() if company_el else ""
-        if company_name:
-            for job in jobs:
-                job["company"] = company_name
-
-        return jobs
-
-    async def go_to_next_page(self, page: Page) -> bool:
-        """Workday uses a 'Show More' button or pagination arrows."""
-        try:
-            # Try 'Show More' / 'View More' button first
-            show_more = await page.query_selector(
-                'button[data-automation-id="loadMoreButton"], '
-                'button:has-text("Show More"), '
-                'button:has-text("View More")'
-            )
-            if show_more:
-                is_disabled = await show_more.get_attribute("disabled")
-                if is_disabled is None:
-                    await show_more.click()
-                    await page.wait_for_timeout(3000)
-                    return True
-
-            # Try next page arrow
-            next_btn = await page.query_selector(
-                'button[data-automation-id="next"], '
-                'button[aria-label="next"], '
-                'button:has-text("Next")'
-            )
-            if next_btn:
-                is_disabled = await next_btn.get_attribute("disabled")
-                if is_disabled is None:
-                    await next_btn.click()
-                    await page.wait_for_load_state("networkidle", timeout=15000)
-                    return True
-
-            return False
-        except Exception:
-            logger.debug("Workday pagination failed")
-            return False
+        return all_jobs
